@@ -79,3 +79,11 @@ soundcloud
 ## License
 
 MIT
+
+---
+
+## Acknowledgments
+
+- Built in collaboration with **Antigravity** (Google DeepMind).
+- Audio streaming powered by **MPV** and **PipeWire**.
+- UI components built on the **GNOME** / **Libadwaita** ecosystem.
