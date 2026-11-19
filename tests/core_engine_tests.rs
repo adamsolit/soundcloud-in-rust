@@ -1,0 +1,288 @@
+use cloudpulse::api::waveform::generate_synthetic_waveform;
+use cloudpulse::audio::types::RepeatMode;
+use cloudpulse::audio::PlaybackQueue;
+use cloudpulse::db::Database;
+use cloudpulse::keyring::AuthStore;
+use cloudpulse::models::track::{format_milliseconds, Track};
+use cloudpulse::ui::views::stream::format_count;
+
+#[test]
+fn test_millisecond_formatter() {
+    assert_eq!(format_milliseconds(0), "0:00");
+    assert_eq!(format_milliseconds(5_000), "0:05");
+    assert_eq!(format_milliseconds(65_000), "1:05");
+    assert_eq!(format_milliseconds(600_000), "10:00");
+    assert_eq!(format_milliseconds(3_665_000), "1:01:05");
+}
+
+#[test]
+fn test_count_formatter() {
+    assert_eq!(format_count(42), "42");
+    assert_eq!(format_count(999), "999");
+    assert_eq!(format_count(1_200), "1.2K");
+    assert_eq!(format_count(45_600), "45.6K");
+    assert_eq!(format_count(1_500_000), "1.5M");
+}
+
+#[test]
+fn test_synthetic_waveform_bounds() {
+    let samples = generate_synthetic_waveform(123456, 100);
+    assert_eq!(samples.len(), 100);
+    for s in samples {
+        assert!(s >= 0.05 && s <= 1.0, "Sample out of bounds: {}", s);
+    }
+}
+
+#[test]
+fn test_playback_queue_logic() {
+    let mut queue = PlaybackQueue::new();
+    assert_eq!(queue.repeat_mode, RepeatMode::Off);
+
+    let t1 = create_dummy_track(1, "Track 1");
+    let t2 = create_dummy_track(2, "Track 2");
+    let t3 = create_dummy_track(3, "Track 3");
+
+    // Load queue starting at index 0
+    let curr = queue.set_queue(vec![t1.clone(), t2.clone(), t3.clone()], 0);
+    assert_eq!(curr.unwrap().id, 1);
+    assert_eq!(queue.items.len(), 2);
+
+    // Next track
+    let next = queue.next_track();
+    assert_eq!(next.unwrap().id, 2);
+    assert_eq!(queue.history.len(), 1);
+    assert_eq!(queue.history[0].id, 1);
+
+    // Previous track
+    let prev = queue.previous_track();
+    assert_eq!(prev.unwrap().id, 1);
+
+    // Repeat one mode
+    queue.repeat_mode = RepeatMode::One;
+    let rep = queue.next_track();
+    assert_eq!(rep.unwrap().id, 1);
+}
+
+#[test]
+fn test_database_caching_and_history() {
+    let db = Database::new().expect("Failed to initialize SQLite test DB");
+    let track = create_dummy_track(999, "Test Underground Ambient");
+
+    // Cache track
+    db.cache_track(&track, true).expect("Failed to cache track");
+
+    // Retrieve liked tracks
+    let liked = db.get_liked_tracks().expect("Failed to query liked tracks");
+    assert!(liked.iter().any(|t| t.id == 999));
+
+    // Record playback
+    db.record_playback(999).expect("Failed to record playback");
+    let history = db.get_playback_history(10).expect("Failed to get history");
+    assert!(history.iter().any(|t| t.id == 999));
+
+    // Cache waveform
+    let samples = vec![0.1, 0.4, 0.9, 0.3];
+    db.save_cached_waveform(999, &samples).expect("Save waveform");
+    let cached_wf = db.get_cached_waveform(999).expect("Get waveform");
+    assert_eq!(cached_wf, Some(samples));
+}
+
+#[test]
+fn test_auth_store_fallback() {
+    let test_dir = std::env::temp_dir().join(format!("cloudpulse_test_{}", fastrand::u64(..)));
+    let _ = std::fs::create_dir_all(&test_dir);
+    let session_file = test_dir.join("test_auth_session.json");
+
+    let store = AuthStore::with_custom_path("cloudpulse_test_isolated", session_file.clone());
+    let token = "OAuth 2-293842-test-token-value";
+
+    store.save_oauth_token(token).expect("Save token");
+    let loaded = store.get_oauth_token().expect("Load token");
+    assert_eq!(loaded, Some(token.to_string()));
+
+    store.save_client_id("mCvc6pfl077AipUMKehAWm2ICrAJ1xiU").expect("Save cid");
+    let loaded_cid = store.get_client_id().expect("Load cid");
+    assert_eq!(loaded_cid, Some("mCvc6pfl077AipUMKehAWm2ICrAJ1xiU".to_string()));
+
+    // Verify token was NOT overwritten by client_id
+    assert_eq!(store.get_oauth_token().unwrap(), Some(token.to_string()));
+
+    store.clear_oauth_token().expect("Clear token");
+    let cleared = store.get_oauth_token().expect("Load after clear");
+    assert_eq!(cleared, None);
+
+    let _ = std::fs::remove_dir_all(&test_dir);
+}
+
+#[test]
+fn test_token_sanitization() {
+    use cloudpulse::api::auth::sanitize_token;
+    assert_eq!(sanitize_token("2-293444-10294829"), "2-293444-10294829");
+    assert_eq!(sanitize_token("OAuth 2-293444-10294829"), "2-293444-10294829");
+    assert_eq!(sanitize_token("  \"2-293444-10294829\"  "), "2-293444-10294829");
+    assert_eq!(sanitize_token("'OAuth 2-293444-10294829'"), "2-293444-10294829");
+}
+
+#[test]
+fn test_artwork_resolution_and_fallback() {
+    let mut track = create_dummy_track(100, "Track With Large Artwork");
+    assert_eq!(
+        track.best_artwork_url(),
+        Some("https://i1.sndcdn.com/artworks-sample-t500x500.jpg".to_string())
+    );
+
+    // Track without artwork falls back to creator's avatar
+    track.artwork_url = None;
+    track.user = Some(cloudpulse::models::track::TrackUser {
+        id: 42,
+        username: "Producer".to_string(),
+        avatar_url: Some("https://i1.sndcdn.com/avatars-producer-large.jpg".to_string()),
+        permalink_url: None,
+        followers_count: Some(100),
+    });
+
+    assert_eq!(
+        track.best_artwork_url(),
+        Some("https://i1.sndcdn.com/avatars-producer-t500x500.jpg".to_string())
+    );
+    assert_eq!(
+        track.thumbnail_url(),
+        Some("https://i1.sndcdn.com/avatars-producer-large.jpg".to_string())
+    );
+}
+
+#[test]
+fn test_playlist_cover_resolution() {
+    use cloudpulse::models::playlist::Playlist;
+
+    let mut pl = Playlist {
+        id: 1,
+        title: "Test Playlist".to_string(),
+        description: None,
+        duration: Some(100),
+        track_count: Some(2),
+        artwork_url: Some("https://i1.sndcdn.com/artworks-playlist.jpg".to_string()),
+        permalink_url: None,
+        is_public: Some(true),
+        user: None,
+        tracks: vec![],
+        created_at: None,
+        release_date: None,
+        likes_count: Some(5),
+    };
+
+    assert_eq!(pl.cover_url(), Some("https://i1.sndcdn.com/artworks-playlist.jpg".to_string()));
+
+    // Fallback to first track's cover if playlist artwork is None
+    pl.artwork_url = None;
+    let track1 = create_dummy_track(10, "Track 1");
+    pl.tracks.push(track1);
+
+    assert_eq!(pl.cover_url(), Some("https://i1.sndcdn.com/artworks-sample-large.jpg".to_string()));
+}
+
+#[test]
+fn test_activity_summary_and_parsing() {
+    use cloudpulse::models::activity::ActivityItem;
+    use cloudpulse::models::user::UserProfile;
+
+    let user = UserProfile {
+        id: 1234,
+        username: "ReciterAhmed".to_string(),
+        permalink: Some("reciter-ahmed".to_string()),
+        permalink_url: Some("https://soundcloud.com/reciter-ahmed".to_string()),
+        avatar_url: Some("https://example.com/avatar.jpg".to_string()),
+        followers_count: Some(500),
+        followings_count: Some(20),
+        likes_count: Some(80),
+        playlist_count: Some(5),
+        track_count: Some(12),
+        description: Some("Islamic recitations".to_string()),
+        city: Some("Cairo".to_string()),
+        country: Some("EG".to_string()),
+        verified: Some(true),
+    };
+
+    let item = ActivityItem {
+        r#type: "affiliation".to_string(),
+        created_at: "2026-11-06T11:49:43Z".to_string(),
+        user: Some(user),
+        origin: None,
+    };
+
+    assert_eq!(item.action_summary(), "ReciterAhmed started following you");
+}
+
+#[test]
+fn test_conversation_other_user_resolution() {
+    use cloudpulse::models::conversation::Conversation;
+    use cloudpulse::models::user::UserProfile;
+
+    let my_user = UserProfile {
+        id: 1001,
+        username: "me_user".to_string(),
+        permalink: None,
+        permalink_url: None,
+        avatar_url: None,
+        followers_count: None,
+        followings_count: None,
+        likes_count: None,
+        playlist_count: None,
+        track_count: None,
+        description: None,
+        city: None,
+        country: None,
+        verified: None,
+    };
+
+    let other_user = UserProfile {
+        id: 2002,
+        username: "friend_user".to_string(),
+        permalink: None,
+        permalink_url: None,
+        avatar_url: Some("https://example.com/friend.jpg".to_string()),
+        followers_count: None,
+        followings_count: None,
+        likes_count: None,
+        playlist_count: None,
+        track_count: None,
+        description: None,
+        city: None,
+        country: None,
+        verified: None,
+    };
+
+    let conv = Conversation {
+        id: "1001:2002".to_string(),
+        last_message: None,
+        read: true,
+        started_at: None,
+        summary: None,
+        users: vec![my_user, other_user],
+    };
+
+    assert_eq!(conv.display_title(1001), "friend_user");
+    assert_eq!(conv.display_avatar(1001), Some("https://example.com/friend.jpg".to_string()));
+}
+
+fn create_dummy_track(id: u64, title: &str) -> Track {
+    Track {
+        id,
+        title: title.to_string(),
+        user: None,
+        duration: 180_000,
+        artwork_url: Some("https://i1.sndcdn.com/artworks-sample-large.jpg".to_string()),
+        waveform_url: Some("https://wave.sndcdn.com/sample_m.png".to_string()),
+        permalink_url: Some(format!("https://soundcloud.com/artist/{}", id)),
+        playback_count: Some(15_000),
+        likes_count: Some(450),
+        reposts_count: Some(60),
+        comment_count: Some(12),
+        description: Some("Test track description".to_string()),
+        genre: Some("Ambient".to_string()),
+        tag_list: Some("synth drone".to_string()),
+        created_at: Some("2026-10-30T12:00:00Z".to_string()),
+        user_favorite: Some(false),
+        media: None,
+    }
+}

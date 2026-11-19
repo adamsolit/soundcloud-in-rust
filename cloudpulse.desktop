@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=SoundCloud
+Comment=Native SoundCloud client for Arch Linux & Wayland
+Exec=soundcloud
+Icon=soundcloud
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Player;
+Keywords=SoundCloud;Streaming;Audio;Waveform;Player;
+StartupNotify=true
+StartupWMClass=org.cloudpulse.SoundCloud

@@ -1,0 +1,374 @@
+/* CloudPulse - Clean Minimalist Native Linux Desktop Styling */
+
+/* ==========================================================================
+   Typography Hierarchy: Unified Clean Modern Geometric Sans
+   Bilingual support: Adwaita Sans / Inter / Noto Sans / Noto Sans Arabic
+   ========================================================================== */
+
+* {
+    font-family: 'Adwaita Sans', 'Inter', 'Noto Sans', 'Noto Sans Arabic', system-ui, -apple-system, sans-serif;
+    -gtk-icon-style: symbolic;
+}
+
+window,
+widget,
+label,
+button,
+entry,
+textview,
+headerbar,
+popover,
+scrolledwindow,
+stack {
+    font-family: 'Adwaita Sans', 'Inter', 'Noto Sans', 'Noto Sans Arabic', system-ui, -apple-system, sans-serif;
+}
+
+window.cloudpulse-main-window {
+    background-color: #111111;
+    color: #ffffff;
+}
+
+/* Sidebar navigation */
+.sidebar-panel {
+    background-color: #141414;
+    border-right: 1px solid #1e1e1e;
+    padding: 14px 10px;
+}
+
+.brand-label {
+    font-weight: 700;
+    font-size: 1.15rem;
+    color: #ffffff;
+    letter-spacing: -0.2px;
+}
+
+.brand-accent {
+    color: #ffffff;
+}
+
+.nav-button {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #8c8c8c;
+    font-weight: 500;
+    font-size: 0.88rem;
+    transition: all 120ms ease-in-out;
+}
+
+.nav-button:hover {
+    background-color: #1d1d1d;
+    color: #ffffff;
+}
+
+.nav-button.active {
+    background-color: #242424;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+/* Bottom Persistent Player Bar */
+.player-bar {
+    background-color: #151515;
+    border-top: 1px solid #202020;
+    padding: 8px 18px;
+    min-height: 80px;
+}
+
+.player-artwork {
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.artist-avatar {
+    border-radius: 50%;
+    background-color: #202020;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    border: 2px solid #282828;
+}
+
+.player-title {
+    font-weight: 600;
+    font-size: 0.90rem;
+    color: #ffffff;
+    line-height: 1.25;
+}
+
+.player-artist {
+    font-size: 0.82rem;
+    font-weight: 400;
+    color: #888888;
+}
+
+/* Transport Controls: Clean Crisp White Aesthetic */
+.btn-transport-play {
+    background: #ffffff;
+    color: #111111;
+    border-radius: 50%;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+    border: none;
+    box-shadow: 0 3px 12px rgba(255, 255, 255, 0.10);
+    transition: transform 100ms ease, background 100ms ease;
+}
+
+.btn-transport-play:hover {
+    background: #e8e8e8;
+    transform: scale(1.04);
+}
+
+.btn-transport-play:active {
+    background: #cccccc;
+    transform: scale(0.96);
+}
+
+.btn-pill-play {
+    background: #ffffff;
+    color: #111111;
+    border-radius: 20px;
+    padding: 7px 16px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border: none;
+    box-shadow: 0 2px 8px rgba(255, 255, 255, 0.12);
+    transition: transform 100ms ease, background 100ms ease;
+}
+
+.btn-pill-play:hover {
+    background: #e8e8e8;
+    transform: translateY(-1px);
+}
+
+.btn-pill-play:active {
+    background: #cccccc;
+    transform: translateY(0);
+}
+
+.btn-transport {
+    background: transparent;
+    border: none;
+    color: #808080;
+    border-radius: 50%;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+    transition: color 100ms ease, background 100ms ease;
+}
+
+.btn-transport:hover {
+    color: #ffffff;
+    background: #222222;
+}
+
+.btn-transport.active {
+    color: #ffffff;
+    background: #282828;
+}
+
+.btn-heart-liked {
+    color: #ffffff;
+}
+
+/* Unified Time labels: same clean sans-serif font */
+.time-label {
+    font-size: 0.80rem;
+    font-weight: 500;
+    color: #808080;
+}
+
+/* Track Cards */
+.track-card {
+    background-color: #171717;
+    border-radius: 8px;
+    border: 1px solid #222222;
+    padding: 12px 14px;
+    transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.track-card:hover {
+    background-color: #1e1e1e;
+    border-color: #303030;
+    transform: translateY(-1px);
+}
+
+.track-card-artwork {
+    border-radius: 6px;
+    background-color: #222222;
+}
+
+.card-play-btn {
+    background: #ffffff;
+    color: #111111;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+
+.card-play-btn:hover {
+    background: #e8e8e8;
+}
+
+/* Account and Settings Panels */
+.account-card {
+    background-color: #171717;
+    border-radius: 10px;
+    border: 1px solid #242424;
+    padding: 16px 18px;
+}
+
+.login-guide-box {
+    background-color: #131313;
+    border-left: 2px solid #ffffff;
+    border-radius: 6px;
+    padding: 12px 14px;
+}
+
+.badge-connected {
+    color: #ffffff;
+    font-size: 0.80rem;
+    font-weight: 600;
+}
+
+.badge-guest {
+    color: #6a6a6a;
+    font-size: 0.80rem;
+    font-weight: 500;
+}
+
+.sidebar-user-pill {
+    background-color: #191919;
+    border-radius: 8px;
+    padding: 8px 10px;
+    border: 1px solid #242424;
+    transition: all 120ms ease;
+}
+
+.sidebar-user-pill:hover {
+    background-color: #222222;
+    border-color: #323232;
+}
+
+.track-card-title {
+    font-weight: 600;
+    font-size: 0.90rem;
+    color: #ffffff;
+    line-height: 1.25;
+}
+
+.track-card-artist {
+    font-size: 0.82rem;
+    font-weight: 400;
+    color: #888888;
+}
+
+.track-card-stats {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: #666666;
+}
+
+/* Filter Chips & Genre Pills: Clean Monochrome */
+.filter-chip {
+    background-color: #1d1d1d;
+    border: 1px solid #2a2a2a;
+    border-radius: 18px;
+    padding: 5px 12px;
+    color: #9c9c9c;
+    font-size: 0.80rem;
+    font-weight: 500;
+    transition: all 100ms ease;
+}
+
+.filter-chip:hover {
+    background-color: #262626;
+    border-color: #383838;
+    color: #ffffff;
+}
+
+.filter-chip.active {
+    background-color: #ffffff;
+    border-color: #ffffff;
+    color: #111111;
+    font-weight: 600;
+}
+
+/* Search Entry */
+.sc-search-entry {
+    background-color: #181818;
+    border: 1px solid #282828;
+    border-radius: 20px;
+    padding: 8px 16px;
+    color: #ffffff;
+    font-size: 0.88rem;
+    font-weight: 400;
+}
+
+.sc-search-entry:focus-within {
+    border-color: #ffffff;
+    box-shadow: 0 0 0 1px #ffffff;
+}
+
+/* Waveform Canvas */
+.waveform-canvas {
+    border-radius: 3px;
+    min-height: 40px;
+}
+
+/* Large Waveform Canvas (Track Detail) */
+.waveform-canvas-hero {
+    border-radius: 5px;
+    min-height: 100px;
+}
+
+/* Comment Bubble on Timeline */
+.comment-marker {
+    background-color: #ffffff;
+    border-radius: 50%;
+    min-width: 5px;
+    min-height: 5px;
+}
+
+/* Upload drop area */
+.upload-dropzone {
+    border: 1.5px dashed #303030;
+    border-radius: 10px;
+    background-color: #161616;
+    padding: 36px 18px;
+    transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.upload-dropzone:hover {
+    border-color: #ffffff;
+    background-color: #1c1c1c;
+}
+
+/* Volume Slider */
+scale.volume-scale highlight {
+    background-color: #ffffff;
+}
+
+scale.volume-scale slider {
+    background-color: #ffffff;
+    border: none;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+
+/* Header Popover Overlays (Messages & Notifications) */
+popover {
+    background-color: #141414;
+    border: 1px solid #282828;
+    border-radius: 12px;
+    box-shadow: 0 10px 36px rgba(0, 0, 0, 0.7);
+    padding: 0;
+}
+
+popover > arrow {
+    background-color: #141414;
+    border-color: #282828;
+}
+
+popover contents {
+    background-color: #141414;
+    border-radius: 12px;
+    padding: 6px;
+}

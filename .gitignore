@@ -1,0 +1,8 @@
+/target
+*.sock
+*.log
+*.db
+*.db-shm
+*.db-wal
+.cache/
+auth_session.json

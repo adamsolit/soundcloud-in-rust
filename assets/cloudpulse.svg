@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E1E1E"/>
+      <stop offset="100%" stop-color="#121212"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FF7733"/>
+      <stop offset="100%" stop-color="#FF5500"/>
+    </linearGradient>
+  </defs>
+  <!-- Background squircle -->
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bg)" stroke="#282828" stroke-width="2"/>
+  <!-- SoundCloud-style waveform bars -->
+  <rect x="24" y="60" width="6" height="24" rx="3" fill="url(#orange)"/>
+  <rect x="34" y="48" width="6" height="40" rx="3" fill="url(#orange)"/>
+  <rect x="44" y="36" width="6" height="58" rx="3" fill="url(#orange)"/>
+  <rect x="54" y="28" width="6" height="74" rx="3" fill="url(#orange)"/>
+  <rect x="64" y="22" width="6" height="84" rx="3" fill="url(#orange)"/>
+  <rect x="74" y="32" width="6" height="66" rx="3" fill="url(#orange)"/>
+  <rect x="84" y="44" width="6" height="46" rx="3" fill="url(#orange)"/>
+  <rect x="94" y="56" width="6" height="28" rx="3" fill="url(#orange)"/>
+</svg>
