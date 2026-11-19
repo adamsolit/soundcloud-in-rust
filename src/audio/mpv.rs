@@ -1,6 +1,7 @@
 use anyhow::{bail, Context, Result};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
+use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -25,8 +26,8 @@ impl MpvDriver {
         let sock_path = format!("/tmp/cloudpulse_mpv_{}.sock", std::process::id());
         let _ = std::fs::remove_file(&sock_path);
 
-        let child = Command::new("mpv")
-            .arg("--idle=yes")
+        let mut cmd = Command::new("mpv");
+        cmd.arg("--idle=yes")
             .arg("--no-video")
             .arg(format!("--input-ipc-server={}", sock_path))
             .arg("--ao=pipewire,pulse,alsa")
@@ -39,9 +40,16 @@ impl MpvDriver {
             .arg("--terminal=no")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .context("Failed to spawn mpv background process")?;
+            .stderr(Stdio::null());
+
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+                Ok(())
+            });
+        }
+
+        let child = cmd.spawn().context("Failed to spawn mpv background process")?;
 
         // Wait up to 1500ms for IPC socket creation
         let mut connected_cmd = None;
@@ -58,6 +66,20 @@ impl MpvDriver {
         }
 
         let cmd_stream = connected_cmd.context("Timed out connecting to mpv IPC socket")?;
+
+        // Continually drain command replies so kernel socket buffer never blocks mpv IPC
+        if let Ok(reader_stream) = cmd_stream.try_clone() {
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(reader_stream);
+                let mut line = String::new();
+                while reader.read_line(&mut line).is_ok() {
+                    if line.is_empty() {
+                        break;
+                    }
+                    line.clear();
+                }
+            });
+        }
 
         // Establish second connection for event monitoring
         let mut evt_stream = UnixStream::connect(&sock_path)
@@ -255,7 +277,7 @@ impl MpvDriver {
     pub fn seek(&self, position_ms: u64) -> Result<()> {
         let secs = position_ms as f64 / 1000.0;
         let cmd = serde_json::json!({
-            "command": ["seek", secs, "absolute"]
+            "command": ["seek", secs, "absolute+keyframes"]
         })
         .to_string();
         self.send_command(&cmd)?;

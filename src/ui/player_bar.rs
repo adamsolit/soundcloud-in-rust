@@ -386,20 +386,72 @@ impl PlayerBar {
         self.btn_next.connect_clicked(move |_| f());
     }
 
-    pub fn connect_shuffle<F: Fn() + 'static>(&self, f: F) {
-        let btn_clone = self.btn_shuffle.clone();
-        self.btn_shuffle.connect_clicked(move |_| {
-            if btn_clone.has_css_class("active") {
-                btn_clone.remove_css_class("active");
-            } else {
-                btn_clone.add_css_class("active");
+    pub fn set_repeat_mode(&self, mode: crate::audio::types::RepeatMode) {
+        match mode {
+            crate::audio::types::RepeatMode::Off => {
+                self.btn_repeat.remove_css_class("active");
+                self.btn_repeat.set_icon_name("media-playlist-repeat-symbolic");
+                self.btn_repeat.set_tooltip_text(Some("Repeat: Off"));
             }
-            f();
+            crate::audio::types::RepeatMode::All => {
+                self.btn_repeat.add_css_class("active");
+                self.btn_repeat.set_icon_name("media-playlist-repeat-symbolic");
+                self.btn_repeat.set_tooltip_text(Some("Repeat: All"));
+            }
+            crate::audio::types::RepeatMode::One => {
+                self.btn_repeat.add_css_class("active");
+                self.btn_repeat.set_icon_name("media-playlist-repeat-song-symbolic");
+                self.btn_repeat.set_tooltip_text(Some("Repeat: One"));
+            }
+        }
+    }
+
+    pub fn set_shuffle(&self, shuffle: bool) {
+        if shuffle {
+            self.btn_shuffle.add_css_class("active");
+            self.btn_shuffle.set_tooltip_text(Some("Shuffle: On"));
+        } else {
+            self.btn_shuffle.remove_css_class("active");
+            self.btn_shuffle.set_tooltip_text(Some("Shuffle: Off"));
+        }
+    }
+
+    pub fn connect_shuffle<F: Fn() -> bool + 'static>(&self, f: F) {
+        let btn = self.btn_shuffle.clone();
+        self.btn_shuffle.connect_clicked(move |_| {
+            let active = f();
+            if active {
+                btn.add_css_class("active");
+                btn.set_tooltip_text(Some("Shuffle: On"));
+            } else {
+                btn.remove_css_class("active");
+                btn.set_tooltip_text(Some("Shuffle: Off"));
+            }
         });
     }
 
-    pub fn connect_repeat<F: Fn() + 'static>(&self, f: F) {
-        self.btn_repeat.connect_clicked(move |_| f());
+    pub fn connect_repeat<F: Fn() -> crate::audio::types::RepeatMode + 'static>(&self, f: F) {
+        let btn = self.btn_repeat.clone();
+        self.btn_repeat.connect_clicked(move |_| {
+            let mode = f();
+            match mode {
+                crate::audio::types::RepeatMode::Off => {
+                    btn.remove_css_class("active");
+                    btn.set_icon_name("media-playlist-repeat-symbolic");
+                    btn.set_tooltip_text(Some("Repeat: Off"));
+                }
+                crate::audio::types::RepeatMode::All => {
+                    btn.add_css_class("active");
+                    btn.set_icon_name("media-playlist-repeat-symbolic");
+                    btn.set_tooltip_text(Some("Repeat: All"));
+                }
+                crate::audio::types::RepeatMode::One => {
+                    btn.add_css_class("active");
+                    btn.set_icon_name("media-playlist-repeat-song-symbolic");
+                    btn.set_tooltip_text(Some("Repeat: One"));
+                }
+            }
+        });
     }
 
     pub fn connect_seek<F: Fn(f64) + 'static>(&self, f: F) {

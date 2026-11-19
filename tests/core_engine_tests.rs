@@ -61,6 +61,34 @@ fn test_playback_queue_logic() {
     queue.repeat_mode = RepeatMode::One;
     let rep = queue.next_track();
     assert_eq!(rep.unwrap().id, 1);
+
+    // Skip next track explicitly bypasses RepeatMode::One
+    let skipped = queue.skip_next_track();
+    assert_eq!(skipped.unwrap().id, 2);
+
+    // Repeat cycling
+    queue.repeat_mode = RepeatMode::Off;
+    assert_eq!(queue.cycle_repeat(), RepeatMode::All);
+    assert_eq!(queue.cycle_repeat(), RepeatMode::One);
+    assert_eq!(queue.cycle_repeat(), RepeatMode::Off);
+
+    // Test shuffle toggle and sequential restoration
+    let t4 = create_dummy_track(4, "Track 4");
+    let t5 = create_dummy_track(5, "Track 5");
+    let t6 = create_dummy_track(6, "Track 6");
+    queue.set_queue(vec![t1.clone(), t2.clone(), t3.clone(), t4.clone(), t5.clone(), t6.clone()], 1);
+    assert_eq!(queue.current.as_ref().unwrap().id, 2);
+    assert_eq!(queue.items.len(), 4);
+    assert_eq!(queue.items.iter().map(|t| t.id).collect::<Vec<_>>(), vec![3, 4, 5, 6]);
+
+    // Turn shuffle on
+    queue.set_shuffle(true);
+    assert!(queue.shuffle);
+
+    // Turn shuffle off -> items must strictly restore to sequential remaining order [3, 4, 5, 6]
+    queue.set_shuffle(false);
+    assert!(!queue.shuffle);
+    assert_eq!(queue.items.iter().map(|t| t.id).collect::<Vec<_>>(), vec![3, 4, 5, 6]);
 }
 
 #[test]

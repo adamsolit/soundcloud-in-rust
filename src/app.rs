@@ -1,5 +1,6 @@
 use anyhow::Result;
 use libadwaita as adw;
+use libadwaita::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -50,6 +51,12 @@ impl Application {
         application.wire_player_bar();
         application.wire_views();
         application.load_initial_data();
+
+        let audio_close = Arc::clone(&application.state.audio);
+        application.window.window().connect_close_request(move |_| {
+            audio_close.stop();
+            glib::Propagation::Proceed
+        });
 
         Ok(application)
     }
@@ -222,12 +229,12 @@ impl Application {
             }
         });
 
-        // Next Track
+        // Next Track (skips past RepeatMode::One when explicitly triggered by user)
         let audio_next = Arc::clone(&audio_c);
         let state_next = Rc::clone(&state_c);
         let win_next = Rc::clone(&win_c);
         player_bar.connect_next(move || {
-            let next = audio_next.get_queue().lock().unwrap().next_track();
+            let next = audio_next.get_queue().lock().unwrap().skip_next_track();
             if let Some(t) = next {
                 let s_c = Rc::clone(&state_next);
                 let w_c = Rc::clone(&win_next);
@@ -254,14 +261,17 @@ impl Application {
 
         // Shuffle
         let audio_shuf = Arc::clone(&audio_c);
+        let win_shuf = Rc::clone(&win_c);
         player_bar.connect_shuffle(move || {
-            let _ = audio_shuf.get_queue().lock().unwrap().toggle_shuffle();
+            let active = audio_shuf.get_queue().lock().unwrap().toggle_shuffle();
+            win_shuf.library_view.playlist_view.set_shuffle_active(active);
+            active
         });
 
         // Repeat
         let audio_rep = Arc::clone(&audio_c);
         player_bar.connect_repeat(move || {
-            let _ = audio_rep.get_queue().lock().unwrap().cycle_repeat();
+            audio_rep.get_queue().lock().unwrap().cycle_repeat()
         });
 
         // Like / Unlike from player bar
@@ -467,20 +477,22 @@ impl Application {
             }
             let s = Rc::clone(&s_pl_q);
             let w = Rc::clone(&w_pl_q);
-            let idx = start_idx.min(tracks.len() - 1);
-            let first_track = tracks[idx].clone();
-            let remaining = tracks[idx + 1..].to_vec();
 
-            // Set up queue with remaining tracks
-            {
-                let q_arc = s.audio.get_queue();
-                let mut q = q_arc.lock().unwrap();
-                q.items = remaining;
+            // Set up queue using set_queue so original order is preserved and shuffle state is respected
+            let first_track = s.audio.get_queue().lock().unwrap().set_queue(tracks, start_idx);
+
+            if let Some(track) = first_track {
+                glib::spawn_future_local(async move {
+                    let _ = play_track_internal(&s, &w, track).await;
+                });
             }
+        });
 
-            glib::spawn_future_local(async move {
-                let _ = play_track_internal(&s, &w, first_track).await;
-            });
+        let audio_pl_shuf = Arc::clone(&self.state.audio);
+        let win_pl_shuf = Rc::clone(&self.window);
+        self.window.library_view.playlist_view.connect_shuffle_toggled(move |active| {
+            audio_pl_shuf.get_queue().lock().unwrap().set_shuffle(active);
+            win_pl_shuf.player_bar().set_shuffle(active);
         });
 
         let s_pl_sel = Rc::clone(&state_c);

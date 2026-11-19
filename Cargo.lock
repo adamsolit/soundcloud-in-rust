@@ -398,6 +398,7 @@ dependencies = [
  "gtk4",
  "keyring",
  "libadwaita",
+ "libc",
  "mpris-server",
  "parking_lot 0.13.0",
  "reqwest",

@@ -17,6 +17,7 @@ pub struct PlaylistView {
     detail_meta: gtk::Label,
     detail_tracks_flow: gtk::Box,
     detail_spinner: gtk::Spinner,
+    btn_shuffle: gtk::ToggleButton,
     current_detail_playlist: Rc<RefCell<Option<Playlist>>>,
     // Callbacks
     on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
@@ -238,14 +239,10 @@ impl PlaylistView {
         // Connect Play All button
         let cur_pl_clone = Rc::clone(&current_detail_playlist);
         let play_q_cb = Rc::clone(&on_play_queue);
-        let btn_shuffle_clone = btn_shuffle.clone();
         btn_play_all.connect_clicked(move |_| {
             if let Some(ref pl) = *cur_pl_clone.borrow() {
                 if !pl.tracks.is_empty() {
-                    let mut tracks = pl.tracks.clone();
-                    if btn_shuffle_clone.is_active() {
-                        fastrand::shuffle(&mut tracks);
-                    }
+                    let tracks = pl.tracks.clone();
                     if let Some(ref cb) = *play_q_cb.borrow() {
                         cb(tracks, 0);
                     }
@@ -270,6 +267,7 @@ impl PlaylistView {
             detail_meta,
             detail_tracks_flow,
             detail_spinner,
+            btn_shuffle,
             current_detail_playlist,
             on_play_track,
             on_play_queue,
@@ -508,6 +506,18 @@ impl PlaylistView {
 
     pub fn set_loading(&self, loading: bool) {
         self.detail_spinner.set_spinning(loading);
+    }
+
+    pub fn set_shuffle_active(&self, active: bool) {
+        if self.btn_shuffle.is_active() != active {
+            self.btn_shuffle.set_active(active);
+        }
+    }
+
+    pub fn connect_shuffle_toggled<F: Fn(bool) + 'static>(&self, f: F) {
+        self.btn_shuffle.connect_toggled(move |btn| {
+            f(btn.is_active());
+        });
     }
 
     pub fn connect_play_track<F: Fn(Track) + 'static>(&self, f: F) {

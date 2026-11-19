@@ -156,9 +156,6 @@ impl WaveformWidget {
 
         // Drag Gesture for smooth real-time scrubbing
         let drag_gesture = gtk::GestureDrag::new();
-        let _da_drag = drawing_area.clone();
-        let _prog_drag = Rc::clone(&progress);
-        let _seek_drag = Rc::clone(&seek_callback);
         let drag_start_x = Rc::new(RefCell::new(0.0));
         let drag_start_x_clone = Rc::clone(&drag_start_x);
 
@@ -170,6 +167,8 @@ impl WaveformWidget {
         let prog_drag_update = Rc::clone(&progress);
         let seek_drag_update = Rc::clone(&seek_callback);
         let drag_start_x_update = Rc::clone(&drag_start_x);
+        let last_seek_time = Rc::new(RefCell::new(std::time::Instant::now()));
+        let last_seek_time_clone = Rc::clone(&last_seek_time);
 
         drag_gesture.connect_drag_update(move |_gesture, offset_x, _offset_y| {
             let width = da_drag_update.width() as f64;
@@ -178,7 +177,28 @@ impl WaveformWidget {
                 let pct = (current_x / width).clamp(0.0, 1.0);
                 *prog_drag_update.borrow_mut() = pct;
                 da_drag_update.queue_draw();
-                if let Some(ref cb) = *seek_drag_update.borrow() {
+
+                // Throttle seeking during continuous mouse drag to prevent flooding MPV demuxer
+                let now = std::time::Instant::now();
+                if now.duration_since(*last_seek_time_clone.borrow()) >= std::time::Duration::from_millis(200) {
+                    *last_seek_time_clone.borrow_mut() = now;
+                    if let Some(ref cb) = *seek_drag_update.borrow() {
+                        cb(pct);
+                    }
+                }
+            }
+        });
+
+        let da_drag_end = drawing_area.clone();
+        let seek_drag_end = Rc::clone(&seek_callback);
+        let drag_start_x_end = Rc::clone(&drag_start_x);
+
+        drag_gesture.connect_drag_end(move |_gesture, offset_x, _offset_y| {
+            let width = da_drag_end.width() as f64;
+            if width > 0.0 {
+                let current_x = *drag_start_x_end.borrow() + offset_x;
+                let pct = (current_x / width).clamp(0.0, 1.0);
+                if let Some(ref cb) = *seek_drag_end.borrow() {
                     cb(pct);
                 }
             }
