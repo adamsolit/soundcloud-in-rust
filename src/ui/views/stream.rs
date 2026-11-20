@@ -26,7 +26,7 @@ impl StreamView {
             .margin_top(16)
             .margin_bottom(16)
             .margin_start(20)
-            .margin_end(20)
+            .margin_end(6)
             .hexpand(true)
             .vexpand(true)
             .build();
@@ -35,6 +35,7 @@ impl StreamView {
         let header_row = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(16)
+            .margin_end(14)
             .build();
 
         let title = gtk::Label::builder()
@@ -57,6 +58,7 @@ impl StreamView {
             .hscrollbar_policy(gtk::PolicyType::Automatic)
             .vscrollbar_policy(gtk::PolicyType::Never)
             .hexpand(true)
+            .margin_end(14)
             .min_content_height(40)
             .build();
 
@@ -79,6 +81,7 @@ impl StreamView {
         let tracks_flow = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(12)
+            .margin_end(14)
             .hexpand(true)
             .build();
 

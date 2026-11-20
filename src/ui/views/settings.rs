@@ -59,7 +59,7 @@ impl SettingsView {
             .margin_top(18)
             .margin_bottom(18)
             .margin_start(24)
-            .margin_end(24)
+            .margin_end(8)
             .hexpand(true)
             .vexpand(true)
             .build();
@@ -67,6 +67,7 @@ impl SettingsView {
         let header_row = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(14)
+            .margin_end(16)
             .build();
 
         let title = gtk::Label::builder()
@@ -94,6 +95,7 @@ impl SettingsView {
         let form_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(18)
+            .margin_end(16)
             .hexpand(true)
             .build();
 

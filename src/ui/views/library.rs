@@ -35,7 +35,7 @@ impl LibraryView {
             .margin_top(16)
             .margin_bottom(16)
             .margin_start(20)
-            .margin_end(20)
+            .margin_end(6)
             .hexpand(true)
             .vexpand(true)
             .build();
@@ -44,6 +44,7 @@ impl LibraryView {
         let header_row = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(16)
+            .margin_end(14)
             .build();
 
         let title = gtk::Label::builder()
@@ -59,6 +60,7 @@ impl LibraryView {
         let tabs_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(8)
+            .margin_end(14)
             .build();
 
         let tab_likes_btn = gtk::Button::builder()
@@ -100,6 +102,7 @@ impl LibraryView {
         let tracks_flow = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(8)
+            .margin_end(14)
             .hexpand(true)
             .build();
 

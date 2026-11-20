@@ -35,7 +35,7 @@ impl TrackDetailView {
             .margin_top(20)
             .margin_bottom(20)
             .margin_start(24)
-            .margin_end(24)
+            .margin_end(8)
             .hexpand(true)
             .vexpand(true)
             .build();
@@ -44,6 +44,7 @@ impl TrackDetailView {
         let hero_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(20)
+            .margin_end(16)
             .build();
 
         let artwork = gtk::Image::builder()
@@ -115,7 +116,7 @@ impl TrackDetailView {
             .margin_top(8)
             .margin_bottom(8)
             .margin_start(8)
-            .margin_end(8)
+            .margin_end(24)
             .build();
 
         let waveform = Rc::new(WaveformWidget::new(80));
@@ -126,6 +127,7 @@ impl TrackDetailView {
         let comment_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(12)
+            .margin_end(16)
             .build();
 
         let comment_input = gtk::Entry::builder()
@@ -148,6 +150,7 @@ impl TrackDetailView {
             .label("Community Comments")
             .css_classes(["player-title"])
             .halign(gtk::Align::Start)
+            .margin_end(16)
             .build();
         container.append(&comments_title);
 
@@ -161,6 +164,7 @@ impl TrackDetailView {
         let comments_list = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(8)
+            .margin_end(16)
             .hexpand(true)
             .build();
 

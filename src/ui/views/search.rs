@@ -31,7 +31,7 @@ impl SearchView {
             .margin_top(16)
             .margin_bottom(16)
             .margin_start(20)
-            .margin_end(20)
+            .margin_end(6)
             .hexpand(true)
             .vexpand(true)
             .build();
@@ -40,6 +40,7 @@ impl SearchView {
         let search_row = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(12)
+            .margin_end(14)
             .hexpand(true)
             .build();
 
@@ -62,6 +63,7 @@ impl SearchView {
         let filter_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(8)
+            .margin_end(14)
             .build();
 
         let filters = [
@@ -130,6 +132,7 @@ impl SearchView {
         let results_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(10)
+            .margin_end(14)
             .hexpand(true)
             .build();
 

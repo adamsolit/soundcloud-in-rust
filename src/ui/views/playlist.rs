@@ -55,6 +55,7 @@ impl PlaylistView {
         let list_header = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(12)
+            .margin_end(14)
             .build();
 
         let title = gtk::Label::builder()
@@ -83,6 +84,7 @@ impl PlaylistView {
         let playlists_flow = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(10)
+            .margin_end(14)
             .hexpand(true)
             .build();
 
@@ -124,6 +126,7 @@ impl PlaylistView {
         let hero_card = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(18)
+            .margin_end(14)
             .css_classes(["account-card"])
             .build();
 
@@ -213,6 +216,7 @@ impl PlaylistView {
         let detail_tracks_flow = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(6)
+            .margin_end(14)
             .hexpand(true)
             .build();
 
