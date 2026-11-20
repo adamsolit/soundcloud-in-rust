@@ -15,6 +15,10 @@ pub struct MainWindow {
     sidebar: Rc<Sidebar>,
     view_stack: gtk::Stack,
     player_bar: Rc<PlayerBar>,
+    pub header: adw::HeaderBar,
+    pub body_box: gtk::Box,
+    pub is_mini_player: Rc<std::cell::Cell<bool>>,
+    pub normal_size: Rc<std::cell::Cell<(i32, i32)>>,
     pub profile_avatar: gtk::Image,
     pub btn_profile: gtk::Button,
     pub previous_view: Rc<std::cell::RefCell<String>>,
@@ -216,11 +220,18 @@ impl MainWindow {
             sidebar_for_prof.set_active(NavTarget::Settings);
         });
 
+        let is_mini_player = Rc::new(std::cell::Cell::new(false));
+        let normal_size = Rc::new(std::cell::Cell::new((1120, 760)));
+
         Self {
             window,
             sidebar,
             view_stack,
             player_bar,
+            header,
+            body_box,
+            is_mini_player,
+            normal_size,
             profile_avatar,
             btn_profile,
             previous_view,
@@ -234,6 +245,30 @@ impl MainWindow {
             track_detail_view,
             settings_view,
         }
+    }
+
+    pub fn toggle_mini_player(&self) {
+        let is_mini = self.is_mini_player.get();
+        if is_mini {
+            self.is_mini_player.set(false);
+            self.header.set_visible(true);
+            self.body_box.set_visible(true);
+            let (w, h) = self.normal_size.get();
+            self.window.set_default_size(w, h);
+        } else {
+            let w = self.window.default_width();
+            let h = self.window.default_height();
+            self.normal_size.set((w, h));
+            self.is_mini_player.set(true);
+            self.header.set_visible(false);
+            self.body_box.set_visible(false);
+            self.window.set_default_size(440, 105);
+        }
+    }
+
+    pub fn toggle_sidebar(&self) {
+        let cur = self.sidebar.widget().is_visible();
+        self.sidebar.widget().set_visible(!cur);
     }
 
     pub fn update_user_profile(&self, user: Option<&crate::models::user::UserProfile>) {

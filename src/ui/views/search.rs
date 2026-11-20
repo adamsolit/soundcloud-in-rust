@@ -22,6 +22,7 @@ pub struct SearchView {
     on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>>,
     on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_select_user: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
+    on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
 }
 
 impl SearchView {
@@ -79,10 +80,6 @@ impl SearchView {
         let current_query = Rc::new(RefCell::new(String::new()));
         let search_generation = Rc::new(std::cell::Cell::new(0u64));
         let on_search: Rc<RefCell<Option<Box<dyn Fn(String, SearchFilter)>>>> = Rc::new(RefCell::new(None));
-        let on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
-        let on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>> = Rc::new(RefCell::new(None));
-        let on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
-        let on_select_user: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
 
         for (filter_type, label) in filters {
             let chip = gtk::Button::builder()
@@ -173,6 +170,12 @@ impl SearchView {
             });
         });
 
+        let on_play_track = Rc::new(RefCell::new(None));
+        let on_like_track = Rc::new(RefCell::new(None));
+        let on_select_track = Rc::new(RefCell::new(None));
+        let on_select_user = Rc::new(RefCell::new(None));
+        let on_queue_track = Rc::new(RefCell::new(None));
+
         Self {
             container,
             search_entry,
@@ -187,7 +190,12 @@ impl SearchView {
             on_like_track,
             on_select_track,
             on_select_user,
+            on_queue_track,
         }
+    }
+
+    pub fn focus_search(&self) {
+        self.search_entry.grab_focus();
     }
 
     pub fn widget(&self) -> &gtk::Box {
@@ -368,6 +376,42 @@ impl SearchView {
         title_lbl.add_controller(title_g);
         title_lbl.set_tooltip_text(Some("Click title to view comments & details"));
 
+        // Right-click context menu
+        let play_cb_ctx = Rc::clone(&self.on_play_track);
+        let queue_cb_ctx = Rc::clone(&self.on_queue_track);
+        let detail_cb_ctx = Rc::clone(&self.on_select_track);
+        let artist_cb_ctx = Rc::clone(&self.on_select_user);
+        let like_cb_ctx = Rc::clone(&self.on_like_track);
+
+        let actions = crate::ui::context_menu::TrackActions {
+            on_play: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *play_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_add_to_queue: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *queue_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_view_details: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *detail_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_artist_profile: Some(Rc::new(move |uid| {
+                if let Some(ref cb) = *artist_cb_ctx.borrow() {
+                    cb(uid);
+                }
+            })),
+            on_toggle_like: Some(Rc::new(move |t, s| {
+                if let Some(ref cb) = *like_cb_ctx.borrow() {
+                    cb(t, s);
+                }
+            })),
+        };
+        crate::ui::context_menu::attach_track_context_menu(&row, track, actions);
+
         row
     }
 
@@ -505,5 +549,9 @@ impl SearchView {
 
     pub fn connect_select_user<F: Fn(u64) + 'static>(&self, f: F) {
         *self.on_select_user.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_queue_track<F: Fn(Track) + 'static>(&self, f: F) {
+        *self.on_queue_track.borrow_mut() = Some(Box::new(f));
     }
 }

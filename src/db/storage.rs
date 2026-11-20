@@ -252,6 +252,14 @@ impl Database {
         Ok(())
     }
 
+    pub fn get_bool_setting(&self, key: &str, default: bool) -> bool {
+        self.get_setting(key).ok().flatten().map(|s| s == "true" || s == "1").unwrap_or(default)
+    }
+
+    pub fn set_bool_setting(&self, key: &str, val: bool) -> Result<()> {
+        self.set_setting(key, if val { "true" } else { "false" })
+    }
+
     pub fn save_user_profile(&self, user: &crate::models::user::UserProfile) -> Result<()> {
         let json = serde_json::to_string(user)?;
         self.set_setting("current_user_profile", &json)

@@ -315,6 +315,19 @@ impl MpvDriver {
         let _ = self.send_command(&cmd);
     }
 
+    pub fn set_audio_normalization(&self, enabled: bool) {
+        let filter = if enabled {
+            "lavfi=[dynaudnorm=f=75:g=25:p=0.95:m=10.0:r=0.9]"
+        } else {
+            ""
+        };
+        let cmd = serde_json::json!({
+            "command": ["set_property", "af", filter]
+        })
+        .to_string();
+        let _ = self.send_command(&cmd);
+    }
+
     pub fn stop(&self) {
         let cmd = serde_json::json!({
             "command": ["stop"]

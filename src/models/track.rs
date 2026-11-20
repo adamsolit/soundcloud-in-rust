@@ -86,6 +86,10 @@ impl Track {
             .unwrap_or("Unknown Artist")
     }
 
+    pub fn user_id(&self) -> Option<u64> {
+        self.user.as_ref().map(|u| u.id)
+    }
+
     pub fn best_artwork_url(&self) -> Option<String> {
         self.artwork_url
             .as_ref()

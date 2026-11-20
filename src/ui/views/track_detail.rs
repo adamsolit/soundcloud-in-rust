@@ -273,6 +273,7 @@ impl TrackDetailView {
 
         self.waveform.set_samples(samples);
         self.waveform.set_progress(0.0);
+        self.waveform.set_duration_ms(track.duration);
     }
 
     pub fn update_position(&self, position_ms: u64, duration_ms: u64) {

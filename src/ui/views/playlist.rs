@@ -26,6 +26,7 @@ pub struct PlaylistView {
     on_unlike_playlist: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
     on_select_playlist: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
     on_create_playlist: Rc<RefCell<Option<Box<dyn Fn(CreatePlaylistPayload)>>>>,
+    on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
 }
 
 impl PlaylistView {
@@ -171,6 +172,7 @@ impl PlaylistView {
         let on_unlike_playlist: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
         let on_select_playlist: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
         let on_create_playlist: Rc<RefCell<Option<Box<dyn Fn(CreatePlaylistPayload)>>>> = Rc::new(RefCell::new(None));
+        let on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
 
         let play_actions_row = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -304,6 +306,7 @@ impl PlaylistView {
             on_unlike_playlist,
             on_select_playlist,
             on_create_playlist,
+            on_queue_track,
         }
     }
 
@@ -607,6 +610,32 @@ impl PlaylistView {
         row.append(&like_btn);
         row.append(&dur_lbl);
 
+        // Right-click context menu
+        let play_cb_ctx = Rc::clone(&self.on_play_track);
+        let queue_cb_ctx = Rc::clone(&self.on_queue_track);
+        let like_cb_ctx = Rc::clone(&self.on_like_track);
+
+        let actions = crate::ui::context_menu::TrackActions {
+            on_play: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *play_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_add_to_queue: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *queue_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_view_details: None,
+            on_artist_profile: None,
+            on_toggle_like: Some(Rc::new(move |t, s| {
+                if let Some(ref cb) = *like_cb_ctx.borrow() {
+                    cb(t, s);
+                }
+            })),
+        };
+        crate::ui::context_menu::attach_track_context_menu(&row, track, actions);
+
         row
     }
 
@@ -648,6 +677,10 @@ impl PlaylistView {
 
     pub fn connect_create_playlist<F: Fn(CreatePlaylistPayload) + 'static>(&self, f: F) {
         *self.on_create_playlist.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_queue_track<F: Fn(Track) + 'static>(&self, f: F) {
+        *self.on_queue_track.borrow_mut() = Some(Box::new(f));
     }
 }
 

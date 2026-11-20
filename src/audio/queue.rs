@@ -135,10 +135,33 @@ impl PlaybackQueue {
         self.repeat_mode
     }
 
+    pub fn jump_to(&mut self, idx: usize) -> Option<Track> {
+        if idx >= self.items.len() {
+            return None;
+        }
+        if let Some(curr) = self.current.take() {
+            self.history.push(curr);
+        }
+        for _ in 0..idx {
+            if !self.items.is_empty() {
+                self.history.push(self.items.remove(0));
+            }
+        }
+        let target = self.items.remove(0);
+        self.current = Some(target.clone());
+        Some(target)
+    }
+
+    pub fn remove_at(&mut self, idx: usize) -> Option<Track> {
+        if idx < self.items.len() {
+            Some(self.items.remove(idx))
+        } else {
+            None
+        }
+    }
+
     pub fn clear(&mut self) {
-        self.current = None;
         self.items.clear();
         self.original_pool.clear();
-        self.history.clear();
     }
 }

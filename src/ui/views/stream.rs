@@ -16,6 +16,8 @@ pub struct StreamView {
     on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>>,
     on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_genre_change: Rc<RefCell<Option<Box<dyn Fn(String)>>>>,
+    on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    on_artist_click: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
     current_genre: Rc<RefCell<String>>,
 }
 
@@ -93,6 +95,8 @@ impl StreamView {
         let on_like_track = Rc::new(RefCell::new(None));
         let on_select_track = Rc::new(RefCell::new(None));
         let on_genre_change = Rc::new(RefCell::new(None));
+        let on_queue_track = Rc::new(RefCell::new(None));
+        let on_artist_click = Rc::new(RefCell::new(None));
         let current_genre = Rc::new(RefCell::new("my_stream".to_string()));
 
         let view = Self {
@@ -104,6 +108,8 @@ impl StreamView {
             on_like_track,
             on_select_track,
             on_genre_change,
+            on_queue_track,
+            on_artist_click,
             current_genre,
         };
 
@@ -372,6 +378,42 @@ impl StreamView {
         title_lbl.add_controller(title_gesture);
         title_lbl.set_tooltip_text(Some("Click title to view comments & details"));
 
+        // Right-click context menu
+        let play_cb_ctx = Rc::clone(&self.on_play_track);
+        let queue_cb_ctx = Rc::clone(&self.on_queue_track);
+        let detail_cb_ctx = Rc::clone(&self.on_select_track);
+        let artist_cb_ctx = Rc::clone(&self.on_artist_click);
+        let like_cb_ctx = Rc::clone(&self.on_like_track);
+
+        let actions = crate::ui::context_menu::TrackActions {
+            on_play: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *play_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_add_to_queue: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *queue_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_view_details: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *detail_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_artist_profile: Some(Rc::new(move |uid| {
+                if let Some(ref cb) = *artist_cb_ctx.borrow() {
+                    cb(uid);
+                }
+            })),
+            on_toggle_like: Some(Rc::new(move |t, s| {
+                if let Some(ref cb) = *like_cb_ctx.borrow() {
+                    cb(t, s);
+                }
+            })),
+        };
+        crate::ui::context_menu::attach_track_context_menu(&card, track, actions);
+
         card
     }
 
@@ -385,6 +427,14 @@ impl StreamView {
 
     pub fn connect_select_track<F: Fn(Track) + 'static>(&self, f: F) {
         *self.on_select_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_queue_track<F: Fn(Track) + 'static>(&self, f: F) {
+        *self.on_queue_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_artist_click<F: Fn(u64) + 'static>(&self, f: F) {
+        *self.on_artist_click.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_genre_change<F: Fn(String) + 'static>(&self, f: F) {

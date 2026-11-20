@@ -1,5 +1,7 @@
+pub mod context_menu;
 pub mod image_loader;
 pub mod player_bar;
+pub mod shortcuts_dialog;
 pub mod sidebar;
 pub mod views;
 pub mod waveform_widget;

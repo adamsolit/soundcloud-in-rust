@@ -96,6 +96,19 @@ fn test_playback_queue_logic() {
     queue.set_shuffle(false);
     // After track 5, next sequential is 6, then wrapping around to 1, 2, 3
     assert_eq!(queue.items.iter().map(|t| t.id).collect::<Vec<_>>(), vec![6, 1, 2, 3]);
+
+    // Test queue jump_to and remove_at
+    let jumped = queue.jump_to(1); // Jump to second item in queue (id 1)
+    assert_eq!(jumped.unwrap().id, 1);
+    assert_eq!(queue.current.as_ref().unwrap().id, 1);
+    assert_eq!(queue.items.iter().map(|t| t.id).collect::<Vec<_>>(), vec![2, 3]);
+
+    let removed = queue.remove_at(0); // Remove first item (id 2)
+    assert_eq!(removed.unwrap().id, 2);
+    assert_eq!(queue.items.iter().map(|t| t.id).collect::<Vec<_>>(), vec![3]);
+
+    queue.clear();
+    assert!(queue.items.is_empty());
 }
 
 #[test]
@@ -130,6 +143,14 @@ fn test_database_caching_and_history() {
     // Dynamic top genres extraction from listening history / likes
     let top_genres = db.get_user_top_genres(5).expect("Extract top genres");
     assert!(!top_genres.is_empty() || true);
+
+    // Bool settings persistence
+    assert_eq!(db.get_bool_setting("non_existent_key", true), true);
+    assert_eq!(db.get_bool_setting("non_existent_key", false), false);
+    db.set_bool_setting("audio_normalization", true).expect("Set bool setting");
+    assert_eq!(db.get_bool_setting("audio_normalization", false), true);
+    db.set_bool_setting("audio_normalization", false).expect("Set bool setting");
+    assert_eq!(db.get_bool_setting("audio_normalization", true), false);
 }
 
 #[test]

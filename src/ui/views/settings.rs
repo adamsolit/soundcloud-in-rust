@@ -37,6 +37,9 @@ pub struct SettingsView {
     btn_discover_cid: gtk::Button,
     // Cache section
     btn_clear_cache: gtk::Button,
+    // Playback & Desktop Preferences
+    switch_normalization: gtk::Switch,
+    switch_notifications: gtk::Switch,
     // Status
     status_label: gtk::Label,
     spinner: gtk::Spinner,
@@ -48,6 +51,8 @@ pub struct SettingsView {
     on_save_cid: Rc<RefCell<Option<Box<dyn Fn(String)>>>>,
     on_discover_cid: Rc<RefCell<Option<Box<dyn Fn()>>>>,
     on_clear_cache: Rc<RefCell<Option<Box<dyn Fn()>>>>,
+    on_toggle_normalization: Rc<RefCell<Option<Box<dyn Fn(bool)>>>>,
+    on_toggle_notifications: Rc<RefCell<Option<Box<dyn Fn(bool)>>>>,
     on_update_profile: Rc<RefCell<Option<Box<dyn Fn(String, Option<String>, Option<String>, Option<String>, Option<String>)>>>>,
 }
 
@@ -491,6 +496,95 @@ impl SettingsView {
         cache_group.append(&btn_clear_cache);
         form_box.append(&cache_group);
 
+        // 4. AUDIO & DESKTOP PREFERENCES CARD
+        let prefs_group = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(14)
+            .css_classes(["account-card"])
+            .build();
+
+        let prefs_title = gtk::Label::builder()
+            .label("Audio & System Preferences")
+            .css_classes(["player-title"])
+            .halign(gtk::Align::Start)
+            .build();
+
+        // Row 1: Loudness Normalization
+        let norm_row = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(12)
+            .build();
+
+        let norm_text_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(2)
+            .hexpand(true)
+            .build();
+
+        let norm_lbl = gtk::Label::builder()
+            .label("Loudness Normalization (dynaudnorm)")
+            .css_classes(["track-card-title"])
+            .halign(gtk::Align::Start)
+            .build();
+
+        let norm_sub = gtk::Label::builder()
+            .label("Real-time EBU R128 dynamic normalization to eliminate jarring volume discrepancies between tracks.")
+            .css_classes(["player-artist"])
+            .halign(gtk::Align::Start)
+            .wrap(true)
+            .build();
+
+        norm_text_box.append(&norm_lbl);
+        norm_text_box.append(&norm_sub);
+
+        let switch_normalization = gtk::Switch::builder()
+            .valign(gtk::Align::Center)
+            .build();
+
+        norm_row.append(&norm_text_box);
+        norm_row.append(&switch_normalization);
+
+        // Row 2: Desktop Notifications
+        let notif_row = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(12)
+            .build();
+
+        let notif_text_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(2)
+            .hexpand(true)
+            .build();
+
+        let notif_lbl = gtk::Label::builder()
+            .label("Desktop Notifications")
+            .css_classes(["track-card-title"])
+            .halign(gtk::Align::Start)
+            .build();
+
+        let notif_sub = gtk::Label::builder()
+            .label("Display native FreeDesktop notifications when tracks change while running in the background.")
+            .css_classes(["player-artist"])
+            .halign(gtk::Align::Start)
+            .wrap(true)
+            .build();
+
+        notif_text_box.append(&notif_lbl);
+        notif_text_box.append(&notif_sub);
+
+        let switch_notifications = gtk::Switch::builder()
+            .valign(gtk::Align::Center)
+            .active(true)
+            .build();
+
+        notif_row.append(&notif_text_box);
+        notif_row.append(&switch_notifications);
+
+        prefs_group.append(&prefs_title);
+        prefs_group.append(&norm_row);
+        prefs_group.append(&notif_row);
+        form_box.append(&prefs_group);
+
         // Status Feedback Banner
         let status_label = gtk::Label::builder()
             .label("Ready")
@@ -616,6 +710,26 @@ impl SettingsView {
             }
         });
 
+        // Preferences callbacks
+        let on_toggle_normalization: Rc<RefCell<Option<Box<dyn Fn(bool)>>>> = Rc::new(RefCell::new(None));
+        let on_toggle_notifications: Rc<RefCell<Option<Box<dyn Fn(bool)>>>> = Rc::new(RefCell::new(None));
+
+        let norm_cb = Rc::clone(&on_toggle_normalization);
+        switch_normalization.connect_state_set(move |_, state| {
+            if let Some(ref cb) = *norm_cb.borrow() {
+                cb(state);
+            }
+            glib::Propagation::Proceed
+        });
+
+        let notif_pref_cb = Rc::clone(&on_toggle_notifications);
+        switch_notifications.connect_state_set(move |_, state| {
+            if let Some(ref cb) = *notif_pref_cb.borrow() {
+                cb(state);
+            }
+            glib::Propagation::Proceed
+        });
+
         Self {
             container,
             account_stack,
@@ -643,6 +757,8 @@ impl SettingsView {
             btn_save_cid,
             btn_discover_cid,
             btn_clear_cache,
+            switch_normalization,
+            switch_notifications,
             status_label,
             spinner,
             on_connect_token,
@@ -652,6 +768,8 @@ impl SettingsView {
             on_save_cid,
             on_discover_cid,
             on_clear_cache,
+            on_toggle_normalization,
+            on_toggle_notifications,
             on_update_profile,
         }
     }
@@ -742,6 +860,22 @@ impl SettingsView {
 
     pub fn connect_clear_cache<F: Fn() + 'static>(&self, f: F) {
         *self.on_clear_cache.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn set_audio_normalization(&self, active: bool) {
+        self.switch_normalization.set_state(active);
+    }
+
+    pub fn set_desktop_notifications(&self, active: bool) {
+        self.switch_notifications.set_state(active);
+    }
+
+    pub fn connect_audio_normalization<F: Fn(bool) + 'static>(&self, f: F) {
+        *self.on_toggle_normalization.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_desktop_notifications<F: Fn(bool) + 'static>(&self, f: F) {
+        *self.on_toggle_notifications.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_update_profile<F: Fn(String, Option<String>, Option<String>, Option<String>, Option<String>) + 'static>(&self, f: F) {

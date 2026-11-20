@@ -9,6 +9,7 @@ pub struct WaveformWidget {
     samples: Rc<RefCell<Vec<f32>>>,
     progress: Rc<RefCell<f64>>,
     hover_pos: Rc<RefCell<Option<f64>>>,
+    duration_ms: Rc<RefCell<u64>>,
     comments: Rc<RefCell<Vec<(f64, String)>>>,
     seek_callback: Rc<RefCell<Option<Box<dyn Fn(f64)>>>>,
 }
@@ -32,6 +33,7 @@ impl WaveformWidget {
         let samples = Rc::new(RefCell::new(default_samples));
         let progress = Rc::new(RefCell::new(0.0));
         let hover_pos = Rc::new(RefCell::new(None));
+        let duration_ms = Rc::new(RefCell::new(0u64));
         let comments = Rc::new(RefCell::new(Vec::new()));
         let seek_callback: Rc<RefCell<Option<Box<dyn Fn(f64)>>>> = Rc::new(RefCell::new(None));
 
@@ -39,6 +41,7 @@ impl WaveformWidget {
         let samples_clone = Rc::clone(&samples);
         let progress_clone = Rc::clone(&progress);
         let hover_clone = Rc::clone(&hover_pos);
+        let duration_clone = Rc::clone(&duration_ms);
         let comments_clone = Rc::clone(&comments);
 
         drawing_area.set_draw_func(move |_area, cr, width_i, height_i| {
@@ -164,7 +167,7 @@ impl WaveformWidget {
                 let _ = cr.fill();
             }
 
-            // Draw hover scrub indicator line
+            // Draw hover scrub indicator line and time indicator pill
             if let Some(hov) = current_hover {
                 let hov_x = hov * w;
                 cr.set_source_rgba(1.0, 1.0, 1.0, 0.85);
@@ -172,6 +175,39 @@ impl WaveformWidget {
                 cr.move_to(hov_x, 0.0);
                 cr.line_to(hov_x, h);
                 let _ = cr.stroke();
+
+                let dur = *duration_clone.borrow();
+                if dur > 0 {
+                    let hover_sec = (hov * dur as f64 / 1000.0) as u64;
+                    let mins = hover_sec / 60;
+                    let secs = hover_sec % 60;
+                    let time_str = format!("{}:{:02}", mins, secs);
+
+                    cr.set_font_size(9.0);
+                    cr.select_font_face("monospace", gtk::cairo::FontSlant::Normal, gtk::cairo::FontWeight::Bold);
+                    if let Ok(ext) = cr.text_extents(&time_str) {
+                        let pill_w = ext.width() + 10.0;
+                        let pill_h = ext.height() + 5.0;
+                        let pill_x = (hov_x - pill_w * 0.5).clamp(2.0, (w - pill_w - 2.0).max(2.0));
+                        let pill_y = 1.0;
+
+                        // Pill background
+                        cr.set_source_rgba(0.06, 0.07, 0.09, 0.94);
+                        cr.rectangle(pill_x, pill_y, pill_w, pill_h);
+                        let _ = cr.fill();
+
+                        // Pill crisp 1px border
+                        cr.set_source_rgba(1.0, 1.0, 1.0, 0.28);
+                        cr.set_line_width(0.75);
+                        cr.rectangle(pill_x, pill_y, pill_w, pill_h);
+                        let _ = cr.stroke();
+
+                        // Time text
+                        cr.set_source_rgb(1.0, 1.0, 1.0);
+                        cr.move_to(pill_x + 5.0, pill_y + pill_h - 2.5);
+                        let _ = cr.show_text(&time_str);
+                    }
+                }
             }
         });
 
@@ -271,6 +307,7 @@ impl WaveformWidget {
             samples,
             progress,
             hover_pos,
+            duration_ms,
             comments,
             seek_callback,
         }
@@ -278,6 +315,11 @@ impl WaveformWidget {
 
     pub fn widget(&self) -> &gtk::DrawingArea {
         &self.drawing_area
+    }
+
+    pub fn set_duration_ms(&self, ms: u64) {
+        *self.duration_ms.borrow_mut() = ms;
+        self.drawing_area.queue_draw();
     }
 
     pub fn set_samples(&self, new_samples: Vec<f32>) {

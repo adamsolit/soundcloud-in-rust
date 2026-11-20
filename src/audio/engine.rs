@@ -258,6 +258,12 @@ impl AudioEngine {
         }
     }
 
+    pub fn set_audio_normalization(&self, enabled: bool) {
+        if let Some(ref mpv) = self.mpv {
+            mpv.set_audio_normalization(enabled);
+        }
+    }
+
     pub fn get_position_ms(&self) -> u64 {
         if let Some(ref mpv) = self.mpv {
             mpv.get_position_ms()

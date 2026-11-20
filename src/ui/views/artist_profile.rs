@@ -31,6 +31,7 @@ pub struct ArtistProfileView {
     on_play_all: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>)>>>>,
     on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_toggle_follow: Rc<RefCell<Option<Box<dyn Fn(u64, bool)>>>>,
+    on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_back: Rc<RefCell<Option<Box<dyn Fn()>>>>,
 }
 
@@ -216,6 +217,7 @@ impl ArtistProfileView {
         let on_play_all: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>)>>>> = Rc::new(RefCell::new(None));
         let on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
         let on_toggle_follow: Rc<RefCell<Option<Box<dyn Fn(u64, bool)>>>> = Rc::new(RefCell::new(None));
+        let on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
         let on_back: Rc<RefCell<Option<Box<dyn Fn()>>>> = Rc::new(RefCell::new(None));
 
         // Connect Back button
@@ -288,6 +290,7 @@ impl ArtistProfileView {
             on_play_all,
             on_select_track,
             on_toggle_follow,
+            on_queue_track,
             on_back,
         }
     }
@@ -542,15 +545,46 @@ impl ArtistProfileView {
 
         // Click title to view detail
         let title_g = gtk::GestureClick::new();
-        let track_detail = track;
+        let track_detail_for_click = track.clone();
         let detail_cb = Rc::clone(&self.on_select_track);
         title_g.connect_pressed(move |_g, _n, _x, _y| {
             if let Some(ref cb) = *detail_cb.borrow() {
-                cb(track_detail.clone());
+                cb(track_detail_for_click.clone());
             }
         });
         title_lbl.add_controller(title_g);
         title_lbl.set_tooltip_text(Some("Click title to view comments & details"));
+
+        // Right-click context menu
+        let play_cb_ctx = Rc::clone(&self.on_play_track);
+        let queue_cb_ctx = Rc::clone(&self.on_queue_track);
+        let detail_cb_ctx = Rc::clone(&self.on_select_track);
+        let like_cb_ctx = Rc::clone(&self.on_like_track);
+
+        let actions = crate::ui::context_menu::TrackActions {
+            on_play: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *play_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_add_to_queue: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *queue_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_view_details: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *detail_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_artist_profile: None,
+            on_toggle_like: Some(Rc::new(move |t, s| {
+                if let Some(ref cb) = *like_cb_ctx.borrow() {
+                    cb(t, s);
+                }
+            })),
+        };
+        crate::ui::context_menu::attach_track_context_menu(&card, track, actions);
 
         card
     }
@@ -573,6 +607,10 @@ impl ArtistProfileView {
 
     pub fn connect_toggle_follow<F: Fn(u64, bool) + 'static>(&self, f: F) {
         *self.on_toggle_follow.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_queue_track<F: Fn(Track) + 'static>(&self, f: F) {
+        *self.on_queue_track.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_back<F: Fn() + 'static>(&self, f: F) {

@@ -24,11 +24,19 @@ pub struct PlayerBar {
     volume_scale: gtk::Scale,
     vol_btn: gtk::Button,
     share_btn: gtk::Button,
+    btn_queue: gtk::Button,
+    btn_mini: gtk::Button,
+    q_title_lbl: gtk::Label,
+    q_items_flow: gtk::Box,
     current_track: Rc<RefCell<Option<Track>>>,
     is_playing: Rc<RefCell<bool>>,
     is_liked: Rc<RefCell<bool>>,
     saved_volume: Rc<Cell<f64>>,
     is_muted: Rc<Cell<bool>>,
+    on_queue_jump: Rc<RefCell<Option<Box<dyn Fn(usize)>>>>,
+    on_queue_remove: Rc<RefCell<Option<Box<dyn Fn(usize)>>>>,
+    on_queue_clear: Rc<RefCell<Option<Box<dyn Fn()>>>>,
+    on_toggle_mini: Rc<RefCell<Option<Box<dyn Fn()>>>>,
 }
 
 impl PlayerBar {
@@ -261,7 +269,86 @@ impl PlayerBar {
             }
         });
 
+        // Queue Flyout Button & Popover
+        let btn_queue = gtk::Button::builder()
+            .icon_name("view-list-bullet-symbolic")
+            .css_classes(["btn-transport"])
+            .tooltip_text("Up Next & Playback Queue")
+            .valign(gtk::Align::Center)
+            .build();
+
+        let queue_popover = gtk::Popover::builder()
+            .autohide(true)
+            .has_arrow(true)
+            .position(gtk::PositionType::Top)
+            .build();
+        queue_popover.set_parent(&btn_queue);
+
+        let queue_container = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(10)
+            .width_request(380)
+            .height_request(420)
+            .margin_top(8)
+            .margin_bottom(8)
+            .margin_start(10)
+            .margin_end(10)
+            .build();
+
+        let q_header = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(8)
+            .build();
+
+        let q_title_lbl = gtk::Label::builder()
+            .label("Up Next (0)")
+            .css_classes(["brand-label"])
+            .halign(gtk::Align::Start)
+            .hexpand(true)
+            .build();
+
+        let q_clear_btn = gtk::Button::builder()
+            .label("Clear Queue")
+            .css_classes(["filter-chip"])
+            .halign(gtk::Align::End)
+            .build();
+
+        q_header.append(&q_title_lbl);
+        q_header.append(&q_clear_btn);
+        queue_container.append(&q_header);
+
+        let q_scroller = gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .vscrollbar_policy(gtk::PolicyType::Automatic)
+            .hexpand(true)
+            .vexpand(true)
+            .build();
+
+        let q_items_flow = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(6)
+            .build();
+
+        q_scroller.set_child(Some(&q_items_flow));
+        queue_container.append(&q_scroller);
+        queue_popover.set_child(Some(&queue_container));
+
+        let q_pop_c = queue_popover.clone();
+        btn_queue.connect_clicked(move |_| {
+            q_pop_c.popup();
+        });
+
+        // Mini-player toggle button
+        let btn_mini = gtk::Button::builder()
+            .icon_name("view-restore-symbolic")
+            .css_classes(["btn-transport"])
+            .tooltip_text("Toggle Mini-Player Mode (Ctrl+M)")
+            .valign(gtk::Align::Center)
+            .build();
+
+        right_box.append(&btn_queue);
         right_box.append(&share_btn);
+        right_box.append(&btn_mini);
         right_box.append(&vol_btn);
         right_box.append(&volume_scale);
 
@@ -290,6 +377,25 @@ impl PlayerBar {
             }
         });
 
+        let on_queue_jump: Rc<RefCell<Option<Box<dyn Fn(usize)>>>> = Rc::new(RefCell::new(None));
+        let on_queue_remove: Rc<RefCell<Option<Box<dyn Fn(usize)>>>> = Rc::new(RefCell::new(None));
+        let on_queue_clear: Rc<RefCell<Option<Box<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+        let on_toggle_mini: Rc<RefCell<Option<Box<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+
+        let clear_cb_c = Rc::clone(&on_queue_clear);
+        q_clear_btn.connect_clicked(move |_| {
+            if let Some(ref cb) = *clear_cb_c.borrow() {
+                cb();
+            }
+        });
+
+        let mini_cb_c = Rc::clone(&on_toggle_mini);
+        btn_mini.connect_clicked(move |_| {
+            if let Some(ref cb) = *mini_cb_c.borrow() {
+                cb();
+            }
+        });
+
         Self {
             container,
             artwork,
@@ -307,11 +413,19 @@ impl PlayerBar {
             volume_scale,
             vol_btn,
             share_btn,
+            btn_queue,
+            btn_mini,
+            q_title_lbl,
+            q_items_flow,
             current_track,
             is_playing,
             is_liked,
             saved_volume,
             is_muted,
+            on_queue_jump,
+            on_queue_remove,
+            on_queue_clear,
+            on_toggle_mini,
         }
     }
 
@@ -335,6 +449,7 @@ impl PlayerBar {
 
         self.waveform.set_samples(samples);
         self.waveform.set_progress(0.0);
+        self.waveform.set_duration_ms(track.duration);
 
         let liked = track.user_favorite.unwrap_or(false);
         *self.is_liked.borrow_mut() = liked;
@@ -483,5 +598,140 @@ impl PlayerBar {
 
     pub fn waveform(&self) -> &WaveformWidget {
         &self.waveform
+    }
+
+    pub fn update_queue(&self, current: Option<&Track>, queue: &[Track]) {
+        self.q_title_lbl.set_label(&format!("Up Next ({})", queue.len()));
+
+        while let Some(child) = self.q_items_flow.first_child() {
+            self.q_items_flow.remove(&child);
+        }
+
+        // 1. Now Playing item (if any)
+        if let Some(curr) = current {
+            let now_playing_hdr = gtk::Label::builder()
+                .label("NOW PLAYING")
+                .css_classes(["time-label"])
+                .halign(gtk::Align::Start)
+                .margin_top(4)
+                .build();
+            self.q_items_flow.append(&now_playing_hdr);
+
+            let row = gtk::Box::builder()
+                .orientation(gtk::Orientation::Horizontal)
+                .spacing(10)
+                .css_classes(["track-card"])
+                .build();
+
+            let art = gtk::Image::builder()
+                .pixel_size(36)
+                .icon_name("audio-x-generic-symbolic")
+                .css_classes(["track-card-artwork"])
+                .build();
+            crate::ui::image_loader::load_into_image(&art, curr.thumbnail_url().as_deref(), "audio-x-generic-symbolic");
+
+            let meta = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(2).hexpand(true).build();
+            let t_lbl = gtk::Label::builder().label(&curr.title).css_classes(["track-card-title"]).halign(gtk::Align::Start).ellipsize(gtk::pango::EllipsizeMode::End).build();
+            let a_lbl = gtk::Label::builder().label(curr.artist_name()).css_classes(["track-card-artist"]).halign(gtk::Align::Start).build();
+            meta.append(&t_lbl);
+            meta.append(&a_lbl);
+
+            let d_lbl = gtk::Label::builder().label(&curr.duration_formatted()).css_classes(["time-label"]).valign(gtk::Align::Center).build();
+
+            row.append(&art);
+            row.append(&meta);
+            row.append(&d_lbl);
+            self.q_items_flow.append(&row);
+        }
+
+        // 2. Up Next items
+        if queue.is_empty() {
+            let empty_lbl = gtk::Label::builder()
+                .label("Queue is empty. Right-click any track across the app to add it to Up Next.")
+                .css_classes(["player-artist"])
+                .margin_top(20)
+                .wrap(true)
+                .build();
+            self.q_items_flow.append(&empty_lbl);
+            return;
+        }
+
+        let up_next_hdr = gtk::Label::builder()
+            .label("NEXT IN QUEUE")
+            .css_classes(["time-label"])
+            .halign(gtk::Align::Start)
+            .margin_top(8)
+            .build();
+        self.q_items_flow.append(&up_next_hdr);
+
+        for (idx, trk) in queue.iter().enumerate() {
+            let row = gtk::Box::builder()
+                .orientation(gtk::Orientation::Horizontal)
+                .spacing(10)
+                .css_classes(["track-card"])
+                .build();
+
+            let art = gtk::Image::builder()
+                .pixel_size(36)
+                .icon_name("audio-x-generic-symbolic")
+                .css_classes(["track-card-artwork"])
+                .build();
+            crate::ui::image_loader::load_into_image(&art, trk.thumbnail_url().as_deref(), "audio-x-generic-symbolic");
+
+            let meta = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(2).hexpand(true).build();
+            let t_lbl = gtk::Label::builder().label(&trk.title).css_classes(["track-card-title"]).halign(gtk::Align::Start).ellipsize(gtk::pango::EllipsizeMode::End).build();
+            let a_lbl = gtk::Label::builder().label(trk.artist_name()).css_classes(["track-card-artist"]).halign(gtk::Align::Start).build();
+            meta.append(&t_lbl);
+            meta.append(&a_lbl);
+
+            let d_lbl = gtk::Label::builder().label(&trk.duration_formatted()).css_classes(["time-label"]).valign(gtk::Align::Center).build();
+
+            let remove_btn = gtk::Button::builder()
+                .icon_name("window-close-symbolic")
+                .css_classes(["btn-card-like"])
+                .valign(gtk::Align::Center)
+                .tooltip_text("Remove from Queue")
+                .build();
+
+            let rem_cb = Rc::clone(&self.on_queue_remove);
+            remove_btn.connect_clicked(move |_| {
+                if let Some(ref cb) = *rem_cb.borrow() {
+                    cb(idx);
+                }
+            });
+
+            let jump_g = gtk::GestureClick::new();
+            let jump_cb = Rc::clone(&self.on_queue_jump);
+            jump_g.connect_pressed(move |_g, _n, _x, _y| {
+                if let Some(ref cb) = *jump_cb.borrow() {
+                    cb(idx);
+                }
+            });
+            meta.add_controller(jump_g);
+            meta.set_tooltip_text(Some("Click to jump to this track"));
+
+            row.append(&art);
+            row.append(&meta);
+            row.append(&d_lbl);
+            row.append(&remove_btn);
+
+            self.q_items_flow.append(&row);
+        }
+    }
+
+    pub fn connect_queue_jump<F: Fn(usize) + 'static>(&self, f: F) {
+        *self.on_queue_jump.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_queue_remove<F: Fn(usize) + 'static>(&self, f: F) {
+        *self.on_queue_remove.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_queue_clear<F: Fn() + 'static>(&self, f: F) {
+        *self.on_queue_clear.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_toggle_mini<F: Fn() + 'static>(&self, f: F) {
+        *self.on_toggle_mini.borrow_mut() = Some(Box::new(f));
     }
 }
