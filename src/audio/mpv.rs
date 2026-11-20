@@ -18,6 +18,7 @@ pub struct MpvDriver {
     duration_ms: Arc<AtomicU64>,
     is_playing: Arc<AtomicBool>,
     is_paused: Arc<AtomicBool>,
+    has_file: Arc<AtomicBool>,
     eof_cb: Arc<Mutex<Option<EofCallback>>>,
 }
 
@@ -97,12 +98,14 @@ impl MpvDriver {
         let duration_ms = Arc::new(AtomicU64::new(0));
         let is_playing = Arc::new(AtomicBool::new(false));
         let is_paused = Arc::new(AtomicBool::new(false));
+        let has_file = Arc::new(AtomicBool::new(false));
         let eof_cb: Arc<Mutex<Option<EofCallback>>> = Arc::new(Mutex::new(None));
 
         let pos_arc = Arc::clone(&position_ms);
         let dur_arc = Arc::clone(&duration_ms);
         let play_arc = Arc::clone(&is_playing);
         let pause_arc = Arc::clone(&is_paused);
+        let has_file_arc = Arc::clone(&has_file);
         let cb_arc = Arc::clone(&eof_cb);
 
         // Dedicated event reader thread
@@ -123,7 +126,9 @@ impl MpvDriver {
                                     Some("time-pos") => {
                                         if let Some(secs) = val.get("data").and_then(|d| d.as_f64()) {
                                             pos_arc.store((secs * 1000.0) as u64, Ordering::Relaxed);
-                                            play_arc.store(true, Ordering::Relaxed);
+                                            if has_file_arc.load(Ordering::Relaxed) {
+                                                play_arc.store(!pause_arc.load(Ordering::Relaxed), Ordering::Relaxed);
+                                            }
                                         }
                                     }
                                     Some("duration") => {
@@ -134,10 +139,15 @@ impl MpvDriver {
                                     Some("pause") => {
                                         if let Some(paused) = val.get("data").and_then(|d| d.as_bool()) {
                                             pause_arc.store(paused, Ordering::Relaxed);
-                                            if paused {
-                                                play_arc.store(false, Ordering::Relaxed);
+                                            if has_file_arc.load(Ordering::Relaxed) {
+                                                if paused {
+                                                    play_arc.store(false, Ordering::Relaxed);
+                                                } else {
+                                                    play_arc.store(true, Ordering::Relaxed);
+                                                }
                                             } else {
-                                                play_arc.store(true, Ordering::Relaxed);
+                                                // When idle with no file loaded, never report playing!
+                                                play_arc.store(false, Ordering::Relaxed);
                                             }
                                         }
                                     }
@@ -147,17 +157,19 @@ impl MpvDriver {
 
                             if val.get("event").and_then(|v| v.as_str()) == Some("start-file") 
                                 || val.get("event").and_then(|v| v.as_str()) == Some("file-loaded") {
+                                has_file_arc.store(true, Ordering::Relaxed);
                                 play_arc.store(true, Ordering::Relaxed);
                                 pause_arc.store(false, Ordering::Relaxed);
                             }
 
                             // Check end-file event (track finished naturally or stopped/errored)
                             if val.get("event").and_then(|v| v.as_str()) == Some("end-file") {
+                                has_file_arc.store(false, Ordering::Relaxed);
+                                play_arc.store(false, Ordering::Relaxed);
+                                pause_arc.store(false, Ordering::Relaxed);
+                                pos_arc.store(0, Ordering::Relaxed);
                                 let reason = val.get("reason").and_then(|v| v.as_str()).unwrap_or("");
                                 if reason == "eof" {
-                                    play_arc.store(false, Ordering::Relaxed);
-                                    pause_arc.store(false, Ordering::Relaxed);
-                                    pos_arc.store(0, Ordering::Relaxed);
                                     debug!("MPV reached EOF on current stream");
                                     if let Ok(guard) = cb_arc.lock() {
                                         if let Some(ref cb) = *guard {
@@ -166,8 +178,6 @@ impl MpvDriver {
                                     }
                                 } else if reason == "error" {
                                     warn!("MPV end-file due to playback error");
-                                    play_arc.store(false, Ordering::Relaxed);
-                                    pause_arc.store(false, Ordering::Relaxed);
                                 }
                             }
                         }
@@ -188,6 +198,7 @@ impl MpvDriver {
             duration_ms,
             is_playing,
             is_paused,
+            has_file,
             eof_cb,
         };
 
@@ -232,14 +243,23 @@ impl MpvDriver {
         bail!("Failed to send command to MPV IPC socket");
     }
 
-    pub fn load_file(&self, uri: &str, duration_ms: u64) -> Result<()> {
+    pub fn load_file(&self, uri: &str, duration_ms: u64, start_pos_ms: u64) -> Result<()> {
+        self.has_file.store(true, Ordering::Relaxed);
         self.duration_ms.store(duration_ms, Ordering::Relaxed);
-        self.position_ms.store(0, Ordering::Relaxed);
+        self.position_ms.store(start_pos_ms, Ordering::Relaxed);
 
-        let cmd = serde_json::json!({
-            "command": ["loadfile", uri, "replace"]
-        })
-        .to_string();
+        let cmd = if start_pos_ms > 0 {
+            let start_sec = start_pos_ms as f64 / 1000.0;
+            serde_json::json!({
+                "command": ["loadfile", uri, "replace", 0, format!("start={}", start_sec)]
+            })
+            .to_string()
+        } else {
+            serde_json::json!({
+                "command": ["loadfile", uri, "replace"]
+            })
+            .to_string()
+        };
 
         self.send_command(&cmd)?;
 
@@ -301,6 +321,7 @@ impl MpvDriver {
         })
         .to_string();
         let _ = self.send_command(&cmd);
+        self.has_file.store(false, Ordering::Relaxed);
         self.is_playing.store(false, Ordering::Relaxed);
         self.is_paused.store(false, Ordering::Relaxed);
         self.position_ms.store(0, Ordering::Relaxed);
@@ -315,11 +336,15 @@ impl MpvDriver {
     }
 
     pub fn is_playing(&self) -> bool {
-        self.is_playing.load(Ordering::Relaxed)
+        self.has_file.load(Ordering::Relaxed) && self.is_playing.load(Ordering::Relaxed)
     }
 
     pub fn is_paused(&self) -> bool {
-        self.is_paused.load(Ordering::Relaxed)
+        self.has_file.load(Ordering::Relaxed) && self.is_paused.load(Ordering::Relaxed)
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        self.has_file.load(Ordering::Relaxed)
     }
 
     pub fn terminate(&self) {

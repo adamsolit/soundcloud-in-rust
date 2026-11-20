@@ -128,8 +128,8 @@ impl AudioEngine {
         }
     }
 
-    pub fn play_stream(&self, uri: &str, track: Track) -> Result<()> {
-        info!("Loading audio stream URI: {}", uri);
+    pub fn play_stream(&self, uri: &str, track: Track, start_pos_ms: u64) -> Result<()> {
+        info!("Loading audio stream URI: {} (start: {}ms)", uri, start_pos_ms);
 
         // Update queue current track
         {
@@ -140,7 +140,7 @@ impl AudioEngine {
         *self.current_duration_ms.lock().unwrap() = track.duration;
 
         if let Some(ref mpv) = self.mpv {
-            mpv.load_file(uri, track.duration)
+            mpv.load_file(uri, track.duration, start_pos_ms)
                 .context("Loading stream in MPV driver")?;
             *self.state.lock().unwrap() = PlaybackState::Playing;
         } else if let Some(ref pipeline) = self.gst_pipeline {
@@ -291,6 +291,14 @@ impl AudioEngine {
                 .unwrap_or(0)
         } else {
             0
+        }
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        if let Some(ref mpv) = self.mpv {
+            mpv.is_loaded()
+        } else {
+            *self.state.lock().unwrap() != PlaybackState::Stopped
         }
     }
 

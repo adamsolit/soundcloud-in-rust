@@ -257,7 +257,11 @@ impl Application {
         let mpris_pp = Rc::clone(&self.state.mpris);
         player_bar.connect_play_pause(move || {
             let st = audio_pp.get_state();
-            if st == crate::audio::PlaybackState::Stopped {
+            let needs_stream = !audio_pp.is_loaded()
+                || st == crate::audio::PlaybackState::Stopped
+                || state_pp.pending_resume_pos.borrow().is_some();
+
+            if needs_stream {
                 if let Some(ref track) = *state_pp.current_track.borrow() {
                     let s = Rc::clone(&state_pp);
                     let w = Rc::clone(&win_pp);
@@ -292,7 +296,24 @@ impl Application {
 
         // Seek from full-width waveform
         let audio_seek = Arc::clone(&audio_c);
+        let state_seek = Rc::clone(&state_c);
+        let win_seek = Rc::clone(&win_c);
         player_bar.connect_seek(move |pct| {
+            if !audio_seek.is_loaded() || state_seek.pending_resume_pos.borrow().is_some() {
+                if let Some(ref track) = *state_seek.current_track.borrow() {
+                    let target_ms = (pct * track.duration as f64) as u64;
+                    win_seek.player_bar().update_position(target_ms, track.duration);
+                    let s = Rc::clone(&state_seek);
+                    let w = Rc::clone(&win_seek);
+                    let t = track.clone();
+                    state_seek.pending_resume_pos.borrow_mut().take();
+                    glib::spawn_future_local(async move {
+                        let _ = play_track_internal_with_seek(&s, &w, t, target_ms).await;
+                    });
+                    return;
+                }
+            }
+
             let dur = audio_seek.get_duration_ms();
             if dur > 0 {
                 let target_ms = (pct * dur as f64) as u64;
@@ -1173,16 +1194,11 @@ async fn play_track_internal_with_seek(
                 return Ok(());
             }
 
-            if let Err(e) = state.audio.play_stream(&stream_url, track.clone()) {
+            if let Err(e) = state.audio.play_stream(&stream_url, track.clone(), seek_to_ms) {
                 error!("Audio engine error playing stream: {}", e);
                 state.audio.stop();
                 window.player_bar().update_playback_state(false);
             } else {
-                if seek_to_ms > 0 {
-                    let _ = state.audio.seek(seek_to_ms);
-                    window.player_bar().update_position(seek_to_ms, track.duration);
-                }
-
                 // Record history and cache track in database
                 let _ = state.db.cache_track(&track, false);
                 let _ = state.db.record_playback(track.id);
