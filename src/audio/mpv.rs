@@ -321,6 +321,17 @@ impl MpvDriver {
     pub fn is_paused(&self) -> bool {
         self.is_paused.load(Ordering::Relaxed)
     }
+
+    pub fn terminate(&self) {
+        let _ = self.send_command("{\"command\": [\"quit\"]}");
+        if let Ok(mut child_guard) = self.process.lock() {
+            if let Some(ref mut child) = *child_guard {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+        let _ = std::fs::remove_file(&self.sock_path);
+    }
 }
 
 impl Drop for MpvDriver {

@@ -59,13 +59,31 @@ impl Application {
         let audio_close = Arc::clone(&application.state.audio);
         let state_close = Rc::clone(&application.state);
         application.window.window().connect_close_request(move |_| {
+            info!("Window close requested. Terminating CloudPulse completely...");
             if let Some(ref track) = *state_close.current_track.borrow() {
                 let pos = audio_close.get_position_ms();
                 let _ = state_close.db.save_playback_state(track, pos);
             }
-            audio_close.stop();
-            glib::Propagation::Proceed
+            audio_close.terminate();
+            std::process::exit(0);
         });
+
+        // Register Ctrl+Q and Ctrl+W global accelerators to terminate completely
+        use gtk4::gio::prelude::ActionMapExt;
+        let action_quit = gtk4::gio::SimpleAction::new("quit", None);
+        let audio_quit = Arc::clone(&application.state.audio);
+        let state_quit = Rc::clone(&application.state);
+        action_quit.connect_activate(move |_, _| {
+            info!("Quit action triggered via accelerator. Terminating completely...");
+            if let Some(ref track) = *state_quit.current_track.borrow() {
+                let pos = audio_quit.get_position_ms();
+                let _ = state_quit.db.save_playback_state(track, pos);
+            }
+            audio_quit.terminate();
+            std::process::exit(0);
+        });
+        app.add_action(&action_quit);
+        app.set_accels_for_action("app.quit", &["<Control>q", "<Control>w"]);
 
         Ok(application)
     }

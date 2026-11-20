@@ -225,6 +225,16 @@ impl AudioEngine {
         }
     }
 
+    pub fn terminate(&self) {
+        if let Some(ref mpv) = self.mpv {
+            mpv.terminate();
+        } else if let Some(ref pipeline) = self.gst_pipeline {
+            use gstreamer::prelude::*;
+            let _ = pipeline.set_state(gstreamer::State::Null);
+        }
+        *self.state.lock().unwrap() = PlaybackState::Stopped;
+    }
+
     pub fn seek(&self, position_ms: u64) -> Result<()> {
         if let Some(ref mpv) = self.mpv {
             mpv.seek(position_ms)?;
