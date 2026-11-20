@@ -101,7 +101,12 @@ impl StreamView {
             current_genre,
         };
 
-        view.init_genres();
+        let default_genres = vec![
+            ("Personal Stream".to_string(), "my_stream".to_string()),
+            ("Mixed For You".to_string(), "mixed_for_you".to_string()),
+            ("Trending".to_string(), "trending".to_string()),
+        ];
+        view.set_genres(default_genres);
         view
     }
 
@@ -109,34 +114,33 @@ impl StreamView {
         &self.container
     }
 
-    fn init_genres(&self) {
-        let genres = [
-            ("Personal Stream", "my_stream"),
-            ("Quran & Recitations", "quran"),
-            ("Lectures & Podcasts", "podcasts"),
-            ("Ambient & Focus", "ambient"),
-            ("Classical", "classical"),
-            ("Trending", "trending"),
-        ];
+    pub fn set_genres(&self, genres: Vec<(String, String)>) {
+        while let Some(child) = self.genre_box.first_child() {
+            self.genre_box.remove(&child);
+        }
+
+        let cur_key = self.current_genre.borrow().clone();
+        let mut has_active = false;
 
         for (label, key) in genres {
+            let is_match = key == cur_key;
             let chip = gtk::Button::builder()
-                .label(label)
+                .label(&label)
                 .css_classes(["filter-chip"])
                 .build();
 
-            if key == "my_stream" {
+            if is_match || (!has_active && (key == "my_stream" || cur_key.is_empty())) {
                 chip.add_css_class("active");
+                has_active = true;
             }
 
-            let key_str = key.to_string();
+            let key_str = key.clone();
             let genre_cb = Rc::clone(&self.on_genre_change);
             let current_g = Rc::clone(&self.current_genre);
             let chip_clone = chip.clone();
             let genre_box_clone = self.genre_box.clone();
 
             chip.connect_clicked(move |_| {
-                // Remove active class from siblings
                 let mut child = genre_box_clone.first_child();
                 while let Some(w) = child {
                     w.remove_css_class("active");

@@ -21,6 +21,7 @@ pub struct AppState {
     pub db: Database,
     pub mpris: Rc<RefCell<Option<MprisService>>>,
     pub current_track: Rc<RefCell<Option<Track>>>,
+    pub pending_resume_pos: Rc<RefCell<Option<u64>>>,
     pub play_request_counter: std::sync::atomic::AtomicU64,
 }
 
@@ -41,6 +42,7 @@ impl Application {
             db,
             mpris: Rc::new(RefCell::new(None)),
             current_track: Rc::new(RefCell::new(None)),
+            pending_resume_pos: Rc::new(RefCell::new(None)),
             play_request_counter: std::sync::atomic::AtomicU64::new(0),
         });
 
@@ -55,7 +57,12 @@ impl Application {
         application.load_initial_data();
 
         let audio_close = Arc::clone(&application.state.audio);
+        let state_close = Rc::clone(&application.state);
         application.window.window().connect_close_request(move |_| {
+            if let Some(ref track) = *state_close.current_track.borrow() {
+                let pos = audio_close.get_position_ms();
+                let _ = state_close.db.save_playback_state(track, pos);
+            }
             audio_close.stop();
             glib::Propagation::Proceed
         });
@@ -139,7 +146,9 @@ impl Application {
     fn setup_playback_sync(&self) {
         let audio_c = Arc::clone(&self.state.audio);
         let win_c = Rc::clone(&self.window);
+        let state_sync = Rc::clone(&self.state);
         let _mpris_holder = Rc::clone(&self.state.mpris);
+        let sync_tick = Rc::new(RefCell::new(0u64));
 
         // Smooth UI timer for waveform progress and time display (80ms interval, avoids GPU bus overload)
         glib::timeout_add_local(Duration::from_millis(80), move || {
@@ -152,6 +161,15 @@ impl Application {
                 win_c.player_bar().update_position(pos, dur);
                 if win_c.track_detail_view.widget().is_visible() {
                     win_c.track_detail_view.update_position(pos, dur);
+                }
+
+                // Auto-save playback state every ~5 seconds (60 ticks * 80ms = 4.8s)
+                let mut tick = sync_tick.borrow_mut();
+                *tick += 1;
+                if *tick % 60 == 0 && pos > 0 {
+                    if let Some(ref track) = *state_sync.current_track.borrow() {
+                        let _ = state_sync.db.save_playback_state(track, pos);
+                    }
                 }
             }
 
@@ -198,11 +216,33 @@ impl Application {
         // Play / Pause toggle
         let audio_pp = Arc::clone(&audio_c);
         let win_pp = Rc::clone(&win_c);
+        let state_pp = Rc::clone(&state_c);
         let mpris_pp = Rc::clone(&self.state.mpris);
         player_bar.connect_play_pause(move || {
+            let st = audio_pp.get_state();
+            if st == crate::audio::PlaybackState::Stopped {
+                if let Some(ref track) = *state_pp.current_track.borrow() {
+                    let s = Rc::clone(&state_pp);
+                    let w = Rc::clone(&win_pp);
+                    let t = track.clone();
+                    let resume_pos = state_pp.pending_resume_pos.borrow_mut().take().unwrap_or(0);
+                    glib::spawn_future_local(async move {
+                        let _ = play_track_internal_with_seek(&s, &w, t, resume_pos).await;
+                    });
+                    return;
+                }
+            }
+
             audio_pp.toggle_play_pause();
             let playing = audio_pp.get_state() == crate::audio::PlaybackState::Playing;
             win_pp.player_bar().update_playback_state(playing);
+
+            if !playing {
+                if let Some(ref track) = *state_pp.current_track.borrow() {
+                    let pos = audio_pp.get_position_ms();
+                    let _ = state_pp.db.save_playback_state(track, pos);
+                }
+            }
 
             if let Some(ref m) = *mpris_pp.borrow() {
                 m.handler.set_playback_status(if playing {
@@ -939,7 +979,54 @@ impl Application {
         if let Ok(liked) = s_lib.db.get_liked_tracks() {
             w_lib.library_view.set_tracks(liked);
         }
+
+        // Restore last played track & exact playback position from database
+        if let Ok(Some(saved)) = self.state.db.get_playback_state() {
+            info!(
+                "Restoring last played track on startup: '{}' by {} at position {}ms",
+                saved.track.title,
+                saved.track.user.as_ref().map(|u| u.username.as_str()).unwrap_or("Unknown Artist"),
+                saved.position_ms
+            );
+            let samples = self
+                .state
+                .db
+                .get_cached_waveform(saved.track.id)
+                .unwrap_or(None)
+                .unwrap_or_else(|| crate::api::waveform::generate_synthetic_waveform(saved.track.id, 100));
+
+            self.window.player_bar().set_track(&saved.track, samples);
+            self.window.player_bar().update_position(saved.position_ms, saved.track.duration);
+            self.window.player_bar().update_playback_state(false);
+            *self.state.current_track.borrow_mut() = Some(saved.track.clone());
+            *self.state.pending_resume_pos.borrow_mut() = Some(saved.position_ms);
+            self.state.audio.get_queue().lock().unwrap().current = Some(saved.track);
+        }
+
+        // Initialize dynamic personalized genre tabs based on the user's algorithm and listening history
+        refresh_personalized_genres(&self.state, &self.window);
     }
+}
+
+fn refresh_personalized_genres(state: &AppState, window: &MainWindow) {
+    let mut genres = vec![
+        ("Personal Stream".to_string(), "my_stream".to_string()),
+        ("Mixed For You".to_string(), "mixed_for_you".to_string()),
+    ];
+
+    if let Ok(user_genres) = state.db.get_user_top_genres(6) {
+        for g in user_genres {
+            if !genres.iter().any(|(_, k)| k.eq_ignore_ascii_case(&g)) {
+                genres.push((g.clone(), g));
+            }
+        }
+    }
+
+    if genres.len() < 5 {
+        genres.push(("Trending".to_string(), "trending".to_string()));
+    }
+
+    window.stream_view.set_genres(genres);
 }
 
 async fn sync_user_data_internal(
@@ -977,6 +1064,9 @@ async fn sync_user_data_internal(
         }
     }
 
+    // 3. Refresh personalized genre tabs based on updated library and listening tastes
+    refresh_personalized_genres(state, window);
+
     window.settings_view.set_loading(false);
     window.settings_view.set_status("Account data synchronized successfully.", false);
     Ok(())
@@ -985,10 +1075,19 @@ async fn sync_user_data_internal(
 async fn play_track_internal(
     state: &Rc<AppState>,
     window: &Rc<MainWindow>,
+    track: Track,
+) -> Result<()> {
+    play_track_internal_with_seek(state, window, track, 0).await
+}
+
+async fn play_track_internal_with_seek(
+    state: &Rc<AppState>,
+    window: &Rc<MainWindow>,
     mut track: Track,
+    seek_to_ms: u64,
 ) -> Result<()> {
     let req_id = state.play_request_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-    info!("Preparing to stream track: {} (ID: {}) [req: {}]", track.title, track.id, req_id);
+    info!("Preparing to stream track: {} (ID: {}) [req: {}] (seek: {}ms)", track.title, track.id, req_id, seek_to_ms);
 
     // If track is a stub or missing transcodings, fetch full track first
     if track.media.as_ref().map(|m| m.transcodings.is_empty()).unwrap_or(true) || track.title == "SoundCloud Track" {
@@ -1016,6 +1115,9 @@ async fn play_track_internal(
 
     // 2. Update UI PlayerBar immediately
     window.player_bar().set_track(&track, samples.clone());
+    if seek_to_ms > 0 {
+        window.player_bar().update_position(seek_to_ms, track.duration);
+    }
     window.player_bar().update_playback_state(true);
 
     *state.current_track.borrow_mut() = Some(track.clone());
@@ -1032,9 +1134,15 @@ async fn play_track_internal(
                 state.audio.stop();
                 window.player_bar().update_playback_state(false);
             } else {
+                if seek_to_ms > 0 {
+                    let _ = state.audio.seek(seek_to_ms);
+                    window.player_bar().update_position(seek_to_ms, track.duration);
+                }
+
                 // Record history and cache track in database
                 let _ = state.db.cache_track(&track, false);
                 let _ = state.db.record_playback(track.id);
+                let _ = state.db.save_playback_state(&track, seek_to_ms);
 
                 // Update MPRIS metadata
                 if let Some(ref m) = *state.mpris.borrow() {

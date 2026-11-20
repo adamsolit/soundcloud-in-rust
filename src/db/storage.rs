@@ -254,4 +254,80 @@ impl Database {
         }
         Ok(None)
     }
+
+    pub fn save_playback_state(&self, track: &Track, position_ms: u64) -> Result<()> {
+        let state = SavedPlaybackState {
+            track: track.clone(),
+            position_ms,
+        };
+        let json = serde_json::to_string(&state)?;
+        self.set_setting("last_playback_state", &json)
+    }
+
+    pub fn get_playback_state(&self) -> Result<Option<SavedPlaybackState>> {
+        if let Some(json) = self.get_setting("last_playback_state")? {
+            if let Ok(state) = serde_json::from_str(&json) {
+                return Ok(Some(state));
+            }
+        }
+        Ok(None)
+    }
+
+    pub fn get_user_top_genres(&self, limit: usize) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT json_payload FROM cached_tracks WHERE is_liked = 1
+            UNION ALL
+            SELECT c.json_payload
+            FROM playback_history h
+            JOIN cached_tracks c ON h.track_id = c.id
+            LIMIT 100
+            "#,
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let json_str: String = row.get(0)?;
+            Ok(json_str)
+        })?;
+
+        let mut genre_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+        for row in rows {
+            if let Ok(json_str) = row {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                    if let Some(g) = val.get("genre").and_then(|v| v.as_str()) {
+                        let trimmed = g.trim();
+                        if !trimmed.is_empty() && trimmed.len() > 2 && trimmed.to_lowercase() != "none" {
+                            *genre_counts.entry(trimmed.to_string()).or_insert(0) += 3;
+                        }
+                    }
+                    if let Some(tags) = val.get("tag_list").and_then(|v| v.as_str()) {
+                        for tag in tags.split_whitespace() {
+                            let clean = tag.trim_matches('"').trim_matches('\'').trim();
+                            if clean.len() >= 3 && !clean.chars().all(|c| c.is_numeric()) {
+                                *genre_counts.entry(clean.to_string()).or_insert(0) += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut sorted_genres: Vec<(String, usize)> = genre_counts.into_iter().collect();
+        sorted_genres.sort_by(|a, b| b.1.cmp(&a.1));
+
+        let top: Vec<String> = sorted_genres
+            .into_iter()
+            .take(limit)
+            .map(|(g, _)| g)
+            .collect();
+
+        Ok(top)
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SavedPlaybackState {
+    pub track: Track,
+    pub position_ms: u64,
 }

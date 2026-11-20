@@ -44,29 +44,86 @@ impl SoundCloudClient {
 
     /// Fetches trending / discovery tracks, personalized when authenticated
     pub async fn get_charts(&self, genre: &str, limit: usize, _offset: usize) -> Result<Vec<Track>> {
-        if genre == "my_stream" && self.session.is_authenticated().await {
-            return self.get_my_stream(limit).await;
+        if genre == "my_stream" {
+            if self.session.is_authenticated().await {
+                if let Ok(stream) = self.get_my_stream(limit).await {
+                    if !stream.is_empty() {
+                        return Ok(stream);
+                    }
+                }
+            }
+        }
+
+        if genre == "mixed_for_you" {
+            if let Ok(mixed) = self.get_mixed_selections().await {
+                if !mixed.is_empty() {
+                    return Ok(mixed);
+                }
+            }
         }
 
         let query = match genre {
-            "my_stream" | "all" | "" => {
-                if self.session.is_authenticated().await {
-                    if let Ok(stream) = self.get_my_stream(limit).await {
-                        if !stream.is_empty() {
-                            return Ok(stream);
-                        }
-                    }
-                }
-                "تلاوات قرآن كريم"
-            }
-            "quran" => "تلاوات قرآن كريم",
-            "podcasts" => "بودكاست دروس",
-            "ambient" => "ambient drone",
-            "classical" => "classical piano",
-            "trending" => "trending",
+            "my_stream" | "all" | "trending" | "" => "trending",
             other => other,
         };
         self.search_tracks(query, limit).await
+    }
+
+    /// Fetches algorithmic mixed selections & personalized discovery from SoundCloud
+    pub async fn get_mixed_selections(&self) -> Result<Vec<Track>> {
+        let client_id = self.ensure_valid_client_id().await?;
+        let oauth_token = self.session.get_oauth_token().await;
+
+        let url = format!("{}/mixed-selections?client_id={}", API_V2_BASE, client_id);
+        let mut req = self
+            .http
+            .get(&url)
+            .header("Accept-Language", "ar,en-US;q=0.8,en;q=0.5");
+
+        if let Some(ref token) = oauth_token {
+            req = req.header("Authorization", format!("OAuth {}", token));
+        }
+
+        let resp = req.send().await.context("Fetching mixed selections")?;
+        if !resp.status().is_success() {
+            bail!("Failed to fetch mixed selections: HTTP {}", resp.status());
+        }
+
+        let body: serde_json::Value = resp.json().await.context("Parsing mixed selections JSON")?;
+        let mut track_ids = Vec::new();
+
+        if let Some(sections) = body.get("collection").and_then(|c| c.as_array()) {
+            for section in sections {
+                if let Some(items) = section.get("items").and_then(|i| i.get("collection")).and_then(|c| c.as_array()) {
+                    for item in items {
+                        if item.get("kind").and_then(|k| k.as_str()) == Some("track") {
+                            if let Some(id) = item.get("id").and_then(|id| id.as_u64()) {
+                                if !track_ids.contains(&id) {
+                                    track_ids.push(id);
+                                }
+                            }
+                        } else if let Some(tracks) = item.get("tracks").and_then(|t| t.as_array()) {
+                            for t in tracks.iter().take(6) {
+                                if let Some(id) = t.get("id").and_then(|id| id.as_u64()) {
+                                    if !track_ids.contains(&id) {
+                                        track_ids.push(id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if track_ids.len() >= 35 {
+                    break;
+                }
+            }
+        }
+
+        if track_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        self.get_tracks_bulk(&track_ids).await
     }
 
     /// Search across SoundCloud with filters and personalized relevance

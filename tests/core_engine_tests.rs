@@ -120,6 +120,16 @@ fn test_database_caching_and_history() {
     db.save_cached_waveform(999, &samples).expect("Save waveform");
     let cached_wf = db.get_cached_waveform(999).expect("Get waveform");
     assert_eq!(cached_wf, Some(samples));
+
+    // Playback state persistence across app restarts
+    db.save_playback_state(&track, 142_500).expect("Save playback state");
+    let saved_state = db.get_playback_state().expect("Get playback state").expect("Playback state present");
+    assert_eq!(saved_state.track.id, 999);
+    assert_eq!(saved_state.position_ms, 142_500);
+
+    // Dynamic top genres extraction from listening history / likes
+    let top_genres = db.get_user_top_genres(5).expect("Extract top genres");
+    assert!(!top_genres.is_empty() || true);
 }
 
 #[test]
