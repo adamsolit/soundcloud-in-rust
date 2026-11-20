@@ -86,7 +86,7 @@ impl TrackDetailView {
         let btn_play = gtk::Button::builder()
             .label("Play Track")
             .icon_name("media-playback-start-symbolic")
-            .css_classes(["btn-transport-play"])
+            .css_classes(["btn-pill-play"])
             .build();
 
         let btn_like = gtk::Button::builder()

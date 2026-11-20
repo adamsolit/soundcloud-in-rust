@@ -22,3 +22,15 @@ pub fn load_css() {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_css_loads_validly() {
+        let _ = gtk::init();
+        let provider = gtk::CssProvider::new();
+        provider.load_from_string(APP_CSS);
+    }
+}

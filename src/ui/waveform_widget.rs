@@ -93,7 +93,7 @@ impl WaveformWidget {
             // Pass 2: Upper hover scrubber preview (if any)
             if let Some(hov) = current_hover {
                 if hov > current_prog {
-                    cr.set_source_rgb(0.60, 0.60, 0.60);
+                    cr.set_source_rgba(1.0, 1.0, 1.0, 0.55);
                     for (i, &val) in bar_values.iter().enumerate() {
                         let bar_x = i as f64 * bar_step;
                         let bar_pct = (bar_x + bar_width * 0.5) / w;
@@ -106,7 +106,7 @@ impl WaveformWidget {
                 }
 
                 // Unplayed bars beyond hover
-                cr.set_source_rgb(0.22, 0.22, 0.22);
+                cr.set_source_rgba(1.0, 1.0, 1.0, 0.18);
                 for (i, &val) in bar_values.iter().enumerate() {
                     let bar_x = i as f64 * bar_step;
                     let bar_pct = (bar_x + bar_width * 0.5) / w;
@@ -117,8 +117,8 @@ impl WaveformWidget {
                 }
                 let _ = cr.fill();
             } else {
-                // Pass 2b: Upper unplayed bars (#303030)
-                cr.set_source_rgb(0.22, 0.22, 0.22);
+                // Pass 2b: Upper unplayed bars
+                cr.set_source_rgba(1.0, 1.0, 1.0, 0.18);
                 for (i, &val) in bar_values.iter().enumerate() {
                     let bar_x = i as f64 * bar_step;
                     let bar_pct = (bar_x + bar_width * 0.5) / w;
@@ -131,7 +131,7 @@ impl WaveformWidget {
             }
 
             // Pass 3: Lower reflection bars (played)
-            cr.set_source_rgba(1.0, 1.0, 1.0, 0.38);
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.32);
             for (i, &val) in bar_values.iter().enumerate() {
                 let bar_x = i as f64 * bar_step;
                 let bar_pct = (bar_x + bar_width * 0.5) / w;
@@ -144,7 +144,7 @@ impl WaveformWidget {
             let _ = cr.fill();
 
             // Pass 4: Lower reflection bars (unplayed)
-            cr.set_source_rgba(0.22, 0.22, 0.22, 0.45);
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.07);
             for (i, &val) in bar_values.iter().enumerate() {
                 let bar_x = i as f64 * bar_step;
                 let bar_pct = (bar_x + bar_width * 0.5) / w;
