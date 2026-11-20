@@ -77,44 +77,84 @@ impl WaveformWidget {
 
             let baseline_y = h * 0.72; // Signature soundcloud upper/lower ratio
 
-            // Draw bars
+            // Draw bars using batched Cairo paths to eliminate GPU pipeline stalls
+            // Pass 1: Upper played bars (#FFFFFF)
+            cr.set_source_rgb(1.0, 1.0, 1.0);
             for (i, &val) in bar_values.iter().enumerate() {
                 let bar_x = i as f64 * bar_step;
                 let bar_pct = (bar_x + bar_width * 0.5) / w;
-
-                let top_height = (val * (baseline_y - 4.0)).max(2.0);
-                let bottom_height = (top_height * 0.35).min(h - baseline_y - 4.0);
-
-                // Determine bar color
                 if bar_pct <= current_prog {
-                    // Crisp pure white accent: #FFFFFF
-                    cr.set_source_rgb(1.0, 1.0, 1.0);
-                } else if let Some(hov) = current_hover {
-                    if bar_pct <= hov {
-                        // Hover scrubber preview color
-                        cr.set_source_rgb(0.60, 0.60, 0.60);
-                    } else {
-                        // Unplayed bar color: #303030
-                        cr.set_source_rgb(0.22, 0.22, 0.22);
+                    let top_height = (val * (baseline_y - 4.0)).max(2.0);
+                    cr.rectangle(bar_x, baseline_y - top_height, bar_width, top_height);
+                }
+            }
+            let _ = cr.fill();
+
+            // Pass 2: Upper hover scrubber preview (if any)
+            if let Some(hov) = current_hover {
+                if hov > current_prog {
+                    cr.set_source_rgb(0.60, 0.60, 0.60);
+                    for (i, &val) in bar_values.iter().enumerate() {
+                        let bar_x = i as f64 * bar_step;
+                        let bar_pct = (bar_x + bar_width * 0.5) / w;
+                        if bar_pct > current_prog && bar_pct <= hov {
+                            let top_height = (val * (baseline_y - 4.0)).max(2.0);
+                            cr.rectangle(bar_x, baseline_y - top_height, bar_width, top_height);
+                        }
                     }
-                } else {
-                    // Unplayed bar color: #303030
-                    cr.set_source_rgb(0.22, 0.22, 0.22);
+                    let _ = cr.fill();
                 }
 
-                // Upper bar
-                cr.rectangle(bar_x, baseline_y - top_height, bar_width, top_height);
+                // Unplayed bars beyond hover
+                cr.set_source_rgb(0.22, 0.22, 0.22);
+                for (i, &val) in bar_values.iter().enumerate() {
+                    let bar_x = i as f64 * bar_step;
+                    let bar_pct = (bar_x + bar_width * 0.5) / w;
+                    if bar_pct > current_prog && bar_pct > hov {
+                        let top_height = (val * (baseline_y - 4.0)).max(2.0);
+                        cr.rectangle(bar_x, baseline_y - top_height, bar_width, top_height);
+                    }
+                }
                 let _ = cr.fill();
-
-                // Lower reflection bar
-                if bar_pct <= current_prog {
-                    cr.set_source_rgba(1.0, 1.0, 1.0, 0.38);
-                } else {
-                    cr.set_source_rgba(0.22, 0.22, 0.22, 0.45);
+            } else {
+                // Pass 2b: Upper unplayed bars (#303030)
+                cr.set_source_rgb(0.22, 0.22, 0.22);
+                for (i, &val) in bar_values.iter().enumerate() {
+                    let bar_x = i as f64 * bar_step;
+                    let bar_pct = (bar_x + bar_width * 0.5) / w;
+                    if bar_pct > current_prog {
+                        let top_height = (val * (baseline_y - 4.0)).max(2.0);
+                        cr.rectangle(bar_x, baseline_y - top_height, bar_width, top_height);
+                    }
                 }
-                cr.rectangle(bar_x, baseline_y + 1.5, bar_width, bottom_height);
                 let _ = cr.fill();
             }
+
+            // Pass 3: Lower reflection bars (played)
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.38);
+            for (i, &val) in bar_values.iter().enumerate() {
+                let bar_x = i as f64 * bar_step;
+                let bar_pct = (bar_x + bar_width * 0.5) / w;
+                if bar_pct <= current_prog {
+                    let top_height = (val * (baseline_y - 4.0)).max(2.0);
+                    let bottom_height = (top_height * 0.35).min(h - baseline_y - 4.0);
+                    cr.rectangle(bar_x, baseline_y + 1.5, bar_width, bottom_height);
+                }
+            }
+            let _ = cr.fill();
+
+            // Pass 4: Lower reflection bars (unplayed)
+            cr.set_source_rgba(0.22, 0.22, 0.22, 0.45);
+            for (i, &val) in bar_values.iter().enumerate() {
+                let bar_x = i as f64 * bar_step;
+                let bar_pct = (bar_x + bar_width * 0.5) / w;
+                if bar_pct > current_prog {
+                    let top_height = (val * (baseline_y - 4.0)).max(2.0);
+                    let bottom_height = (top_height * 0.35).min(h - baseline_y - 4.0);
+                    cr.rectangle(bar_x, baseline_y + 1.5, bar_width, bottom_height);
+                }
+            }
+            let _ = cr.fill();
 
             // Draw comment markers along timeline
             for (comment_pct, _text) in comments.iter() {
@@ -246,7 +286,18 @@ impl WaveformWidget {
     }
 
     pub fn set_progress(&self, prog: f64) {
-        *self.progress.borrow_mut() = prog.clamp(0.0, 1.0);
+        let clamped = prog.clamp(0.0, 1.0);
+        let mut curr = self.progress.borrow_mut();
+        let w = self.drawing_area.width() as f64;
+        if w > 0.0 {
+            let old_px = (*curr * w).round();
+            let new_px = (clamped * w).round();
+            if old_px == new_px {
+                *curr = clamped;
+                return; // Has not moved by even 1 visual pixel on screen
+            }
+        }
+        *curr = clamped;
         self.drawing_area.queue_draw();
     }
 

@@ -89,6 +89,13 @@ fn test_playback_queue_logic() {
     queue.set_shuffle(false);
     assert!(!queue.shuffle);
     assert_eq!(queue.items.iter().map(|t| t.id).collect::<Vec<_>>(), vec![3, 4, 5, 6]);
+
+    // Test un-shuffle when current track was jumped to near the end (e.g. track 5)
+    queue.current = Some(t5.clone());
+    queue.items = vec![t1.clone(), t6.clone(), t3.clone(), t2.clone()];
+    queue.set_shuffle(false);
+    // After track 5, next sequential is 6, then wrapping around to 1, 2, 3
+    assert_eq!(queue.items.iter().map(|t| t.id).collect::<Vec<_>>(), vec![6, 1, 2, 3]);
 }
 
 #[test]

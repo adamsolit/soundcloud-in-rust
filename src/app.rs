@@ -21,6 +21,7 @@ pub struct AppState {
     pub db: Database,
     pub mpris: Rc<RefCell<Option<MprisService>>>,
     pub current_track: Rc<RefCell<Option<Track>>>,
+    pub play_request_counter: std::sync::atomic::AtomicU64,
 }
 
 pub struct Application {
@@ -40,6 +41,7 @@ impl Application {
             db,
             mpris: Rc::new(RefCell::new(None)),
             current_track: Rc::new(RefCell::new(None)),
+            play_request_counter: std::sync::atomic::AtomicU64::new(0),
         });
 
         let window = Rc::new(MainWindow::new(app));
@@ -139,8 +141,8 @@ impl Application {
         let win_c = Rc::clone(&self.window);
         let _mpris_holder = Rc::clone(&self.state.mpris);
 
-        // High frequency UI timer for smooth 60fps waveform progress and time display
-        glib::timeout_add_local(Duration::from_millis(30), move || {
+        // Smooth UI timer for waveform progress and time display (80ms interval, avoids GPU bus overload)
+        glib::timeout_add_local(Duration::from_millis(80), move || {
             let state = audio_c.get_state();
             let is_playing = state == crate::audio::PlaybackState::Playing;
 
@@ -148,7 +150,9 @@ impl Application {
                 let pos = audio_c.get_position_ms();
                 let dur = audio_c.get_duration_ms();
                 win_c.player_bar().update_position(pos, dur);
-                win_c.track_detail_view.update_position(pos, dur);
+                if win_c.track_detail_view.widget().is_visible() {
+                    win_c.track_detail_view.update_position(pos, dur);
+                }
             }
 
             glib::ControlFlow::Continue
@@ -983,13 +987,18 @@ async fn play_track_internal(
     window: &Rc<MainWindow>,
     mut track: Track,
 ) -> Result<()> {
-    info!("Preparing to stream track: {} (ID: {})", track.title, track.id);
+    let req_id = state.play_request_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    info!("Preparing to stream track: {} (ID: {}) [req: {}]", track.title, track.id, req_id);
 
     // If track is a stub or missing transcodings, fetch full track first
     if track.media.as_ref().map(|m| m.transcodings.is_empty()).unwrap_or(true) || track.title == "SoundCloud Track" {
         if let Ok(full) = state.client.get_track(track.id).await {
             track = full;
         }
+    }
+
+    if state.play_request_counter.load(std::sync::atomic::Ordering::SeqCst) != req_id {
+        return Ok(());
     }
 
     // 1. Get waveform samples (from SQLite cache or network/procedural)
@@ -1001,6 +1010,10 @@ async fn play_track_internal(
         fresh_samples
     };
 
+    if state.play_request_counter.load(std::sync::atomic::Ordering::SeqCst) != req_id {
+        return Ok(());
+    }
+
     // 2. Update UI PlayerBar immediately
     window.player_bar().set_track(&track, samples.clone());
     window.player_bar().update_playback_state(true);
@@ -1010,8 +1023,13 @@ async fn play_track_internal(
     // 3. Resolve playable audio stream URL (HLS / progressive)
     match state.client.get_stream_url(&track).await {
         Ok(stream_url) => {
+            if state.play_request_counter.load(std::sync::atomic::Ordering::SeqCst) != req_id {
+                return Ok(());
+            }
+
             if let Err(e) = state.audio.play_stream(&stream_url, track.clone()) {
                 error!("Audio engine error playing stream: {}", e);
+                state.audio.stop();
                 window.player_bar().update_playback_state(false);
             } else {
                 // Record history and cache track in database
@@ -1027,6 +1045,7 @@ async fn play_track_internal(
         }
         Err(e) => {
             error!("Could not resolve stream URL for track {}: {}", track.id, e);
+            state.audio.stop();
             window.player_bar().update_playback_state(false);
         }
     }

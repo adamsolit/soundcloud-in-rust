@@ -69,12 +69,13 @@ impl MpvDriver {
 
         // Continually drain command replies so kernel socket buffer never blocks mpv IPC
         if let Ok(reader_stream) = cmd_stream.try_clone() {
+            let _ = reader_stream.set_read_timeout(None);
             std::thread::spawn(move || {
                 let mut reader = BufReader::new(reader_stream);
                 let mut line = String::new();
-                while reader.read_line(&mut line).is_ok() {
-                    if line.is_empty() {
-                        break;
+                while let Ok(n) = reader.read_line(&mut line) {
+                    if n == 0 {
+                        break; // EOF: socket disconnected
                     }
                     line.clear();
                 }

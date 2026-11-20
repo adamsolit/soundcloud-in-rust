@@ -106,18 +106,24 @@ impl PlaybackQueue {
                 fastrand::shuffle(&mut self.items);
             }
         } else {
-            // Restore remaining queue items to their original sequential order in the playlist!
+            // Restore remaining queue items to their original sequential order in the playlist relative to current track
             if let Some(ref curr) = self.current {
-                if let Some(curr_idx) = self.original_pool.iter().position(|t| t.id == curr.id) {
-                    let mut sequential_remaining = Vec::new();
-                    for t in &self.original_pool[curr_idx + 1..] {
-                        if self.items.iter().any(|item| item.id == t.id) {
-                            sequential_remaining.push(t.clone());
+                let pool_len = self.original_pool.len();
+                if pool_len > 0 {
+                    let curr_idx = self.original_pool.iter().position(|t| t.id == curr.id).unwrap_or(0);
+                    let mut remaining = self.items.clone();
+                    remaining.sort_by_key(|t| {
+                        if let Some(idx) = self.original_pool.iter().position(|p| p.id == t.id) {
+                            if idx > curr_idx {
+                                idx - curr_idx
+                            } else {
+                                pool_len + idx - curr_idx
+                            }
+                        } else {
+                            usize::MAX
                         }
-                    }
-                    if !sequential_remaining.is_empty() {
-                        self.items = sequential_remaining;
-                    }
+                    });
+                    self.items = remaining;
                 }
             }
         }
