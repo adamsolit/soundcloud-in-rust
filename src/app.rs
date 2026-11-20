@@ -251,9 +251,13 @@ impl Application {
         let app_win = Rc::clone(&self.window);
 
         // Spawn MPRIS listener on local async context
+        let state_mpris_init = Rc::clone(&self.state);
         glib::spawn_future_local(async move {
             match MprisService::start(cmd_tx).await {
                 Ok(service) => {
+                    if let Some(ref track) = *state_mpris_init.current_track.borrow() {
+                        service.update_metadata(Some(track)).await;
+                    }
                     *mpris_holder.borrow_mut() = Some(service);
                 }
                 Err(e) => {
@@ -266,21 +270,38 @@ impl Application {
         glib::spawn_future_local(async move {
             while let Some(cmd) = cmd_rx.recv().await {
                 match cmd {
-                    MprisCommand::Play => {
-                        audio_clone.resume();
-                        app_win.player_bar().update_playback_state(true);
-                        app_win.mini_player().update_playback_state(true);
+                    MprisCommand::Play | MprisCommand::PlayPause => {
+                        let st = audio_clone.get_state();
+                        let needs_stream = !audio_clone.is_loaded()
+                            || st == crate::audio::PlaybackState::Stopped
+                            || state_clone.pending_resume_pos.borrow().is_some();
+
+                        if needs_stream {
+                            if let Some(ref track) = *state_clone.current_track.borrow() {
+                                let s = Rc::clone(&state_clone);
+                                let w = Rc::clone(&app_win);
+                                let t = track.clone();
+                                let resume_pos = state_clone.pending_resume_pos.borrow_mut().take().unwrap_or(0);
+                                glib::spawn_future_local(async move {
+                                    let _ = play_track_internal_with_seek(&s, &w, t, resume_pos).await;
+                                });
+                                continue;
+                            }
+                        }
+
+                        if matches!(cmd, MprisCommand::Play) {
+                            audio_clone.resume();
+                        } else {
+                            audio_clone.toggle_play_pause();
+                        }
+                        let playing = audio_clone.get_state() == crate::audio::PlaybackState::Playing;
+                        app_win.player_bar().update_playback_state(playing);
+                        app_win.mini_player().update_playback_state(playing);
                     }
                     MprisCommand::Pause => {
                         audio_clone.pause();
                         app_win.player_bar().update_playback_state(false);
                         app_win.mini_player().update_playback_state(false);
-                    }
-                    MprisCommand::PlayPause => {
-                        audio_clone.toggle_play_pause();
-                        let playing = audio_clone.get_state() == crate::audio::PlaybackState::Playing;
-                        app_win.player_bar().update_playback_state(playing);
-                        app_win.mini_player().update_playback_state(playing);
                     }
                     MprisCommand::Next => {
                         let next = audio_clone.get_queue().lock().unwrap().next_track();
@@ -1552,7 +1573,16 @@ impl Application {
 
             *self.state.current_track.borrow_mut() = Some(saved.track.clone());
             *self.state.pending_resume_pos.borrow_mut() = Some(saved.position_ms);
-            self.state.audio.get_queue().lock().unwrap().current = Some(saved.track);
+            self.state.audio.get_queue().lock().unwrap().current = Some(saved.track.clone());
+
+            let mpris_holder = Rc::clone(&self.state.mpris);
+            let track_c = saved.track;
+            glib::spawn_future_local(async move {
+                if let Some(ref m) = *mpris_holder.borrow() {
+                    m.update_metadata(Some(&track_c)).await;
+                    m.update_status(mpris_server::PlaybackStatus::Paused).await;
+                }
+            });
         }
 
         // Initialize dynamic personalized genre tabs based on the user's algorithm and listening history
