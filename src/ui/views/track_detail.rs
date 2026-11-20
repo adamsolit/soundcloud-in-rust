@@ -8,6 +8,7 @@ use crate::models::track::{format_milliseconds, Track};
 use crate::ui::waveform_widget::WaveformWidget;
 
 pub struct TrackDetailView {
+    scrolled: gtk::ScrolledWindow,
     container: gtk::Box,
     artwork: gtk::Image,
     title_label: gtk::Label,
@@ -29,16 +30,24 @@ pub struct TrackDetailView {
 
 impl TrackDetailView {
     pub fn new() -> Self {
+        let scrolled = gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .vscrollbar_policy(gtk::PolicyType::Automatic)
+            .hexpand(true)
+            .vexpand(true)
+            .build();
+
         let container = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(20)
             .margin_top(20)
-            .margin_bottom(20)
+            .margin_bottom(24)
             .margin_start(24)
-            .margin_end(8)
+            .margin_end(16)
             .hexpand(true)
-            .vexpand(true)
             .build();
+
+        scrolled.set_child(Some(&container));
 
         // 1. Hero Header
         let hero_box = gtk::Box::builder()
@@ -151,15 +160,9 @@ impl TrackDetailView {
             .css_classes(["player-title"])
             .halign(gtk::Align::Start)
             .margin_end(16)
+            .margin_top(8)
             .build();
         container.append(&comments_title);
-
-        let scrolled = gtk::ScrolledWindow::builder()
-            .hscrollbar_policy(gtk::PolicyType::Never)
-            .vscrollbar_policy(gtk::PolicyType::Automatic)
-            .hexpand(true)
-            .vexpand(true)
-            .build();
 
         let comments_list = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
@@ -167,9 +170,7 @@ impl TrackDetailView {
             .margin_end(16)
             .hexpand(true)
             .build();
-
-        scrolled.set_child(Some(&comments_list));
-        container.append(&scrolled);
+        container.append(&comments_list);
 
         let current_track: Rc<RefCell<Option<Track>>> = Rc::new(RefCell::new(None));
         let current_position_ms = Rc::new(RefCell::new(0));
@@ -233,6 +234,7 @@ impl TrackDetailView {
         });
 
         Self {
+            scrolled,
             container,
             artwork,
             title_label,
@@ -253,8 +255,8 @@ impl TrackDetailView {
         }
     }
 
-    pub fn widget(&self) -> &gtk::Box {
-        &self.container
+    pub fn widget(&self) -> &gtk::ScrolledWindow {
+        &self.scrolled
     }
 
     pub fn set_track(&self, track: Track, samples: Vec<f32>) {

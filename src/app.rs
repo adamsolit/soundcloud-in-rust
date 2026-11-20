@@ -256,8 +256,25 @@ impl Application {
             match MprisService::start(cmd_tx).await {
                 Ok(service) => {
                     if let Some(ref track) = *state_mpris_init.current_track.borrow() {
+                        let pos = state_mpris_init.pending_resume_pos.borrow().unwrap_or(0);
+                        service.handler.set_position_micros(pos * 1000);
                         service.update_metadata(Some(track)).await;
+                        service.update_status(mpris_server::PlaybackStatus::Paused).await;
+                        service.emit_seeked(pos * 1000).await;
                     }
+
+                    let q_arc = state_mpris_init.audio.get_queue();
+                    let q = q_arc.lock().unwrap();
+                    let shuf = q.shuffle;
+                    let loop_st = match q.repeat_mode {
+                        crate::audio::types::RepeatMode::Off => mpris_server::LoopStatus::None,
+                        crate::audio::types::RepeatMode::One => mpris_server::LoopStatus::Track,
+                        crate::audio::types::RepeatMode::All => mpris_server::LoopStatus::Playlist,
+                    };
+                    drop(q);
+                    service.update_shuffle(shuf).await;
+                    service.update_loop_status(loop_st).await;
+
                     *mpris_holder.borrow_mut() = Some(service);
                 }
                 Err(e) => {
@@ -297,11 +314,32 @@ impl Application {
                         let playing = audio_clone.get_state() == crate::audio::PlaybackState::Playing;
                         app_win.player_bar().update_playback_state(playing);
                         app_win.mini_player().update_playback_state(playing);
+                        let pos = audio_clone.get_position_ms();
+                        let mpris_holder = Rc::clone(&state_clone.mpris);
+                        glib::spawn_future_local(async move {
+                            if let Some(ref m) = *mpris_holder.borrow() {
+                                let status = if playing {
+                                    mpris_server::PlaybackStatus::Playing
+                                } else {
+                                    mpris_server::PlaybackStatus::Paused
+                                };
+                                m.update_status(status).await;
+                                m.emit_seeked(pos * 1000).await;
+                            }
+                        });
                     }
                     MprisCommand::Pause => {
                         audio_clone.pause();
                         app_win.player_bar().update_playback_state(false);
                         app_win.mini_player().update_playback_state(false);
+                        let pos = audio_clone.get_position_ms();
+                        let mpris_holder = Rc::clone(&state_clone.mpris);
+                        glib::spawn_future_local(async move {
+                            if let Some(ref m) = *mpris_holder.borrow() {
+                                m.update_status(mpris_server::PlaybackStatus::Paused).await;
+                                m.emit_seeked(pos * 1000).await;
+                            }
+                        });
                     }
                     MprisCommand::Next => {
                         let next = audio_clone.get_queue().lock().unwrap().next_track();
@@ -327,11 +365,76 @@ impl Application {
                         audio_clone.stop();
                         app_win.player_bar().update_playback_state(false);
                         app_win.mini_player().update_playback_state(false);
+                        let mpris_holder = Rc::clone(&state_clone.mpris);
+                        glib::spawn_future_local(async move {
+                            if let Some(ref m) = *mpris_holder.borrow() {
+                                m.update_status(mpris_server::PlaybackStatus::Stopped).await;
+                            }
+                        });
                     }
                     MprisCommand::Seek(offset_ms) => {
                         let current_pos = audio_clone.get_position_ms();
                         let new_pos = (current_pos as i64 + offset_ms).max(0) as u64;
                         let _ = audio_clone.seek(new_pos);
+                        let dur = audio_clone.get_duration_ms();
+                        app_win.player_bar().update_position(new_pos, dur);
+                        app_win.mini_player().update_position(new_pos, dur);
+                        if app_win.track_detail_view.widget().is_visible() {
+                            app_win.track_detail_view.update_position(new_pos, dur);
+                        }
+                        let mpris_holder = Rc::clone(&state_clone.mpris);
+                        glib::spawn_future_local(async move {
+                            if let Some(ref m) = *mpris_holder.borrow() {
+                                m.emit_seeked(new_pos * 1000).await;
+                            }
+                        });
+                    }
+                    MprisCommand::SetPosition(target_ms) => {
+                        let _ = audio_clone.seek(target_ms);
+                        let dur = audio_clone.get_duration_ms();
+                        app_win.player_bar().update_position(target_ms, dur);
+                        app_win.mini_player().update_position(target_ms, dur);
+                        if app_win.track_detail_view.widget().is_visible() {
+                            app_win.track_detail_view.update_position(target_ms, dur);
+                        }
+                        let mpris_holder = Rc::clone(&state_clone.mpris);
+                        glib::spawn_future_local(async move {
+                            if let Some(ref m) = *mpris_holder.borrow() {
+                                m.emit_seeked(target_ms * 1000).await;
+                            }
+                        });
+                    }
+                    MprisCommand::SetShuffle(shuffle) => {
+                        let q_arc = audio_clone.get_queue();
+                        let mut q = q_arc.lock().unwrap();
+                        q.set_shuffle(shuffle);
+                        let curr = q.current.clone();
+                        let items = q.items.clone();
+                        drop(q);
+                        app_win.library_view.playlist_view.set_shuffle_active(shuffle);
+                        app_win.player_bar().set_shuffle(shuffle);
+                        app_win.player_bar().update_queue(curr.as_ref(), &items);
+                        let mpris_holder = Rc::clone(&state_clone.mpris);
+                        glib::spawn_future_local(async move {
+                            if let Some(ref m) = *mpris_holder.borrow() {
+                                m.update_shuffle(shuffle).await;
+                            }
+                        });
+                    }
+                    MprisCommand::SetLoopStatus(loop_status) => {
+                        let mode = match loop_status {
+                            mpris_server::LoopStatus::None => crate::audio::types::RepeatMode::Off,
+                            mpris_server::LoopStatus::Track => crate::audio::types::RepeatMode::One,
+                            mpris_server::LoopStatus::Playlist => crate::audio::types::RepeatMode::All,
+                        };
+                        audio_clone.get_queue().lock().unwrap().repeat_mode = mode;
+                        app_win.player_bar().set_repeat_mode(mode);
+                        let mpris_holder = Rc::clone(&state_clone.mpris);
+                        glib::spawn_future_local(async move {
+                            if let Some(ref m) = *mpris_holder.borrow() {
+                                m.update_loop_status(loop_status).await;
+                            }
+                        });
                     }
                     MprisCommand::SetVolume(vol) => {
                         audio_clone.set_volume(vol);
@@ -408,6 +511,7 @@ impl Application {
                         let is_playing = st == crate::audio::PlaybackState::Playing;
                         win_c.player_bar().update_playback_state(is_playing);
                         win_c.mini_player().update_playback_state(is_playing);
+                        let pos = state_c.audio.get_position_ms();
                         if let Some(ref m) = *state_c.mpris.borrow() {
                             let status = if is_playing {
                                 mpris_server::PlaybackStatus::Playing
@@ -417,6 +521,7 @@ impl Application {
                                 mpris_server::PlaybackStatus::Stopped
                             };
                             m.update_status(status).await;
+                            m.emit_seeked(pos * 1000).await;
                         }
                     }
                     _ => {}
@@ -468,6 +573,7 @@ impl Application {
             }
 
             let mpris_clone = Rc::clone(&mpris_pp);
+            let pos = audio_pp.get_position_ms();
             glib::spawn_future_local(async move {
                 if let Some(ref m) = *mpris_clone.borrow() {
                     let st = if playing {
@@ -476,6 +582,7 @@ impl Application {
                         mpris_server::PlaybackStatus::Paused
                     };
                     m.update_status(st).await;
+                    m.emit_seeked(pos * 1000).await;
                 }
             });
         });
@@ -505,6 +612,17 @@ impl Application {
             if dur > 0 {
                 let target_ms = (pct * dur as f64) as u64;
                 let _ = audio_seek.seek(target_ms);
+                win_seek.player_bar().update_position(target_ms, dur);
+                win_seek.mini_player().update_position(target_ms, dur);
+                if win_seek.track_detail_view.widget().is_visible() {
+                    win_seek.track_detail_view.update_position(target_ms, dur);
+                }
+                let m_c = Rc::clone(&state_seek.mpris);
+                glib::spawn_future_local(async move {
+                    if let Some(ref m) = *m_c.borrow() {
+                        m.emit_seeked(target_ms * 1000).await;
+                    }
+                });
             }
         });
 
@@ -551,6 +669,7 @@ impl Application {
         // Shuffle
         let audio_shuf = Arc::clone(&audio_c);
         let win_shuf = Rc::clone(&win_c);
+        let state_shuf = Rc::clone(&state_c);
         player_bar.connect_shuffle(move || {
             let q_arc = audio_shuf.get_queue();
             let mut q = q_arc.lock().unwrap();
@@ -561,13 +680,34 @@ impl Application {
             win_shuf.library_view.playlist_view.set_shuffle_active(active);
             win_shuf.player_bar().set_shuffle(active);
             win_shuf.player_bar().update_queue(curr.as_ref(), &items);
+            let m_c = Rc::clone(&state_shuf.mpris);
+            glib::spawn_future_local(async move {
+                if let Some(ref m) = *m_c.borrow() {
+                    m.update_shuffle(active).await;
+                }
+            });
             active
         });
 
         // Repeat
         let audio_rep = Arc::clone(&audio_c);
+        let win_rep = Rc::clone(&win_c);
+        let state_rep = Rc::clone(&state_c);
         player_bar.connect_repeat(move || {
-            audio_rep.get_queue().lock().unwrap().cycle_repeat()
+            let new_mode = audio_rep.get_queue().lock().unwrap().cycle_repeat();
+            win_rep.player_bar().set_repeat_mode(new_mode);
+            let m_c = Rc::clone(&state_rep.mpris);
+            glib::spawn_future_local(async move {
+                if let Some(ref m) = *m_c.borrow() {
+                    let loop_st = match new_mode {
+                        crate::audio::types::RepeatMode::Off => mpris_server::LoopStatus::None,
+                        crate::audio::types::RepeatMode::One => mpris_server::LoopStatus::Track,
+                        crate::audio::types::RepeatMode::All => mpris_server::LoopStatus::Playlist,
+                    };
+                    m.update_loop_status(loop_st).await;
+                }
+            });
+            new_mode
         });
 
         // Like / Unlike from player bar
@@ -665,6 +805,7 @@ impl Application {
             }
 
             let mpris_clone = Rc::clone(&mpris_mini_pp);
+            let pos = audio_mini_pp.get_position_ms();
             glib::spawn_future_local(async move {
                 if let Some(ref m) = *mpris_clone.borrow() {
                     let st = if playing {
@@ -673,6 +814,7 @@ impl Application {
                         mpris_server::PlaybackStatus::Paused
                     };
                     m.update_status(st).await;
+                    m.emit_seeked(pos * 1000).await;
                 }
             });
         });
@@ -732,6 +874,17 @@ impl Application {
             if dur > 0 {
                 let target_ms = (pct * dur as f64) as u64;
                 let _ = audio_mini_seek.seek(target_ms);
+                win_mini_seek.player_bar().update_position(target_ms, dur);
+                win_mini_seek.mini_player().update_position(target_ms, dur);
+                if win_mini_seek.track_detail_view.widget().is_visible() {
+                    win_mini_seek.track_detail_view.update_position(target_ms, dur);
+                }
+                let m_c = Rc::clone(&state_mini_seek.mpris);
+                glib::spawn_future_local(async move {
+                    if let Some(ref m) = *m_c.borrow() {
+                        m.emit_seeked(target_ms * 1000).await;
+                    }
+                });
             }
         });
 
@@ -1054,6 +1207,7 @@ impl Application {
 
         let audio_pl_shuf = Arc::clone(&self.state.audio);
         let win_pl_shuf = Rc::clone(&self.window);
+        let state_pl_shuf = Rc::clone(&self.state);
         self.window.library_view.playlist_view.connect_shuffle_toggled(move |active| {
             let q_arc = audio_pl_shuf.get_queue();
             let mut q = q_arc.lock().unwrap();
@@ -1063,6 +1217,12 @@ impl Application {
             drop(q);
             win_pl_shuf.player_bar().set_shuffle(active);
             win_pl_shuf.player_bar().update_queue(curr.as_ref(), &items);
+            let m_c = Rc::clone(&state_pl_shuf.mpris);
+            glib::spawn_future_local(async move {
+                if let Some(ref m) = *m_c.borrow() {
+                    m.update_shuffle(active).await;
+                }
+            });
         });
 
         let s_pl_sel = Rc::clone(&state_c);
@@ -1128,11 +1288,22 @@ impl Application {
         });
 
         let audio_td_seek = Arc::clone(&self.state.audio);
+        let win_td_seek = Rc::clone(&self.window);
+        let state_td_seek = Rc::clone(&self.state);
         self.window.track_detail_view.connect_seek(move |pct| {
             let dur = audio_td_seek.get_duration_ms();
             if dur > 0 {
                 let target_ms = (pct * dur as f64) as u64;
                 let _ = audio_td_seek.seek(target_ms);
+                win_td_seek.player_bar().update_position(target_ms, dur);
+                win_td_seek.mini_player().update_position(target_ms, dur);
+                win_td_seek.track_detail_view.update_position(target_ms, dur);
+                let m_c = Rc::clone(&state_td_seek.mpris);
+                glib::spawn_future_local(async move {
+                    if let Some(ref m) = *m_c.borrow() {
+                        m.emit_seeked(target_ms * 1000).await;
+                    }
+                });
             }
         });
 
@@ -1577,10 +1748,13 @@ impl Application {
 
             let mpris_holder = Rc::clone(&self.state.mpris);
             let track_c = saved.track;
+            let resume_pos = saved.position_ms;
             glib::spawn_future_local(async move {
                 if let Some(ref m) = *mpris_holder.borrow() {
+                    m.handler.set_position_micros(resume_pos * 1000);
                     m.update_metadata(Some(&track_c)).await;
                     m.update_status(mpris_server::PlaybackStatus::Paused).await;
+                    m.emit_seeked(resume_pos * 1000).await;
                 }
             });
         }
@@ -1784,8 +1958,10 @@ async fn play_track_internal_with_seek(
 
                 // Update MPRIS metadata
                 if let Some(ref m) = *state.mpris.borrow() {
+                    m.handler.set_position_micros(seek_to_ms * 1000);
                     m.update_metadata(Some(&track)).await;
                     m.update_status(mpris_server::PlaybackStatus::Playing).await;
+                    m.emit_seeked(seek_to_ms * 1000).await;
                 }
 
                 // Sync Queue in PlayerBar popover
@@ -1795,15 +1971,6 @@ async fn play_track_internal_with_seek(
                     (q.current.clone(), q.items.clone())
                 };
                 window.player_bar().update_queue(curr.as_ref(), &items);
-
-                // Send native desktop notification if enabled
-                if state.db.get_bool_setting("desktop_notifications", true) {
-                    let notif = gtk4::gio::Notification::new(&track.title);
-                    notif.set_body(Some(track.artist_name()));
-                    if let Some(app) = window.window().application() {
-                        app.send_notification(Some("current-track"), &notif);
-                    }
-                }
             }
         }
         Err(e) => {

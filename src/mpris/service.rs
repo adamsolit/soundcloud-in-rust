@@ -19,8 +19,11 @@ pub enum MprisCommand {
     Next,
     Previous,
     Stop,
-    Seek(i64),
+    Seek(i64),          // Relative seek offset in ms
+    SetPosition(u64),   // Absolute target position in ms
     SetVolume(f64),
+    SetShuffle(bool),
+    SetLoopStatus(LoopStatus),
 }
 
 #[derive(Clone)]
@@ -30,6 +33,8 @@ pub struct MprisHandler {
     current_track: Arc<Mutex<Option<Track>>>,
     current_volume: Arc<Mutex<f64>>,
     current_position_us: Arc<AtomicU64>,
+    loop_status: Arc<Mutex<LoopStatus>>,
+    shuffle: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl MprisHandler {
@@ -40,6 +45,8 @@ impl MprisHandler {
             current_track: Arc::new(Mutex::new(None)),
             current_volume: Arc::new(Mutex::new(1.0)),
             current_position_us: Arc::new(AtomicU64::new(0)),
+            loop_status: Arc::new(Mutex::new(LoopStatus::None)),
+            shuffle: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -176,7 +183,8 @@ impl PlayerInterface for MprisHandler {
     }
 
     async fn set_position(&self, _track_id: TrackId, position: Time) -> fdo::Result<()> {
-        let _ = self.cmd_tx.send(MprisCommand::Seek(position.as_micros() as i64 / 1000));
+        let pos_ms = (position.as_micros().max(0) / 1000) as u64;
+        let _ = self.cmd_tx.send(MprisCommand::SetPosition(pos_ms));
         Ok(())
     }
 
@@ -189,10 +197,12 @@ impl PlayerInterface for MprisHandler {
     }
 
     async fn loop_status(&self) -> fdo::Result<LoopStatus> {
-        Ok(LoopStatus::None)
+        Ok(*self.loop_status.lock().unwrap())
     }
 
-    async fn set_loop_status(&self, _loop_status: LoopStatus) -> zbus::Result<()> {
+    async fn set_loop_status(&self, loop_status: LoopStatus) -> zbus::Result<()> {
+        *self.loop_status.lock().unwrap() = loop_status;
+        let _ = self.cmd_tx.send(MprisCommand::SetLoopStatus(loop_status));
         Ok(())
     }
 
@@ -205,10 +215,12 @@ impl PlayerInterface for MprisHandler {
     }
 
     async fn shuffle(&self) -> fdo::Result<bool> {
-        Ok(false)
+        Ok(self.shuffle.load(Ordering::Relaxed))
     }
 
-    async fn set_shuffle(&self, _shuffle: bool) -> zbus::Result<()> {
+    async fn set_shuffle(&self, shuffle: bool) -> zbus::Result<()> {
+        self.shuffle.store(shuffle, Ordering::Relaxed);
+        let _ = self.cmd_tx.send(MprisCommand::SetShuffle(shuffle));
         Ok(())
     }
 
@@ -300,6 +312,28 @@ impl MprisService {
         self.handler.set_playback_status(status);
         if let Some(ref server) = self.server {
             let _ = server.properties_changed([Property::PlaybackStatus(status)]).await;
+        }
+    }
+
+    pub async fn update_shuffle(&self, shuffle: bool) {
+        self.handler.shuffle.store(shuffle, Ordering::Relaxed);
+        if let Some(ref server) = self.server {
+            let _ = server.properties_changed([Property::Shuffle(shuffle)]).await;
+        }
+    }
+
+    pub async fn update_loop_status(&self, loop_status: LoopStatus) {
+        *self.handler.loop_status.lock().unwrap() = loop_status;
+        if let Some(ref server) = self.server {
+            let _ = server.properties_changed([Property::LoopStatus(loop_status)]).await;
+        }
+    }
+
+    pub async fn emit_seeked(&self, pos_us: u64) {
+        self.handler.set_position_micros(pos_us);
+        if let Some(ref server) = self.server {
+            let time = Time::from_micros(pos_us as i64);
+            let _ = server.emit(mpris_server::Signal::Seeked { position: time }).await;
         }
     }
 }
