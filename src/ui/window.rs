@@ -149,6 +149,8 @@ impl MainWindow {
             .build();
 
         let sidebar = Rc::new(Sidebar::new());
+        sidebar.widget().set_hexpand(false);
+        sidebar.widget().set_hexpand_set(true);
         body_box.append(sidebar.widget());
 
         let view_stack = gtk::Stack::builder()
