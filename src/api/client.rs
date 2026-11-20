@@ -432,6 +432,29 @@ impl SoundCloudClient {
         Ok(())
     }
 
+    /// Toggles like/save status for a playlist
+    pub async fn toggle_like_playlist(&self, playlist_id: u64, is_liked: bool) -> Result<()> {
+        let client_id = self.ensure_valid_client_id().await?;
+        let oauth_token = self.session.get_oauth_token().await;
+
+        let url = format!("{}/likes/playlists/{}?client_id={}", API_V2_BASE, playlist_id, client_id);
+        let mut req = if is_liked {
+            self.http.post(&url)
+        } else {
+            self.http.delete(&url)
+        };
+
+        if let Some(token) = oauth_token {
+            req = req.header("Authorization", format!("OAuth {}", token));
+        }
+
+        let resp = req.send().await.context("Toggling playlist like status")?;
+        if !resp.status().is_success() {
+            debug!("SoundCloud remote playlist like endpoint returned {}, updated locally", resp.status());
+        }
+        Ok(())
+    }
+
     /// Creates a new playlist
     pub async fn create_playlist(&self, payload: CreatePlaylistPayload) -> Result<Playlist> {
         let client_id = self.ensure_valid_client_id().await?;

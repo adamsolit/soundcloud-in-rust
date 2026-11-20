@@ -22,6 +22,8 @@ pub struct PlaylistView {
     // Callbacks
     on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_play_queue: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>, usize)>>>>,
+    on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>>,
+    on_unlike_playlist: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
     on_select_playlist: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
     on_create_playlist: Rc<RefCell<Option<Box<dyn Fn(CreatePlaylistPayload)>>>>,
 }
@@ -162,6 +164,14 @@ impl PlaylistView {
             .halign(gtk::Align::Start)
             .build();
 
+        let current_detail_playlist: Rc<RefCell<Option<Playlist>>> = Rc::new(RefCell::new(None));
+        let on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
+        let on_play_queue: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>, usize)>>>> = Rc::new(RefCell::new(None));
+        let on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>> = Rc::new(RefCell::new(None));
+        let on_unlike_playlist: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
+        let on_select_playlist: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
+        let on_create_playlist: Rc<RefCell<Option<Box<dyn Fn(CreatePlaylistPayload)>>>> = Rc::new(RefCell::new(None));
+
         let play_actions_row = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(8)
@@ -175,6 +185,19 @@ impl PlaylistView {
             .css_classes(["btn-pill-play"])
             .height_request(36)
             .build();
+
+        let cur_pl_clone = Rc::clone(&current_detail_playlist);
+        let play_q_cb = Rc::clone(&on_play_queue);
+        btn_play_all.connect_clicked(move |_| {
+            if let Some(ref pl) = *cur_pl_clone.borrow() {
+                if !pl.tracks.is_empty() {
+                    let tracks = pl.tracks.clone();
+                    if let Some(ref cb) = *play_q_cb.borrow() {
+                        cb(tracks, 0);
+                    }
+                }
+            }
+        });
 
         let btn_shuffle = gtk::ToggleButton::builder()
             .icon_name("media-playlist-shuffle-symbolic")
@@ -193,8 +216,30 @@ impl PlaylistView {
             }
         });
 
+        let btn_unlike_playlist = gtk::Button::builder()
+            .label("Unlike")
+            .icon_name("starred-symbolic")
+            .css_classes(["filter-chip", "active"])
+            .tooltip_text("Unlike and remove this playlist from your library")
+            .height_request(36)
+            .build();
+
+        let cur_pl_unlike = Rc::clone(&current_detail_playlist);
+        let unlike_cb = Rc::clone(&on_unlike_playlist);
+        let vs_clone2 = view_stack.clone();
+        btn_unlike_playlist.connect_clicked(move |_| {
+            if let Some(ref pl) = *cur_pl_unlike.borrow() {
+                let id = pl.id;
+                if let Some(ref cb) = *unlike_cb.borrow() {
+                    cb(id);
+                }
+                vs_clone2.set_visible_child_name("list");
+            }
+        });
+
         play_actions_row.append(&btn_play_all);
         play_actions_row.append(&btn_shuffle);
+        play_actions_row.append(&btn_unlike_playlist);
 
         hero_meta.append(&detail_title);
         hero_meta.append(&detail_author);
@@ -234,26 +279,6 @@ impl PlaylistView {
             vs_clone.set_visible_child_name("list");
         });
 
-        let current_detail_playlist: Rc<RefCell<Option<Playlist>>> = Rc::new(RefCell::new(None));
-        let on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
-        let on_play_queue: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>, usize)>>>> = Rc::new(RefCell::new(None));
-        let on_select_playlist: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
-        let on_create_playlist: Rc<RefCell<Option<Box<dyn Fn(CreatePlaylistPayload)>>>> = Rc::new(RefCell::new(None));
-
-        // Connect Play All button
-        let cur_pl_clone = Rc::clone(&current_detail_playlist);
-        let play_q_cb = Rc::clone(&on_play_queue);
-        btn_play_all.connect_clicked(move |_| {
-            if let Some(ref pl) = *cur_pl_clone.borrow() {
-                if !pl.tracks.is_empty() {
-                    let tracks = pl.tracks.clone();
-                    if let Some(ref cb) = *play_q_cb.borrow() {
-                        cb(tracks, 0);
-                    }
-                }
-            }
-        });
-
         // Connect New Playlist dialog
         let create_cb = Rc::clone(&on_create_playlist);
         let cont_clone = container.clone();
@@ -275,6 +300,8 @@ impl PlaylistView {
             current_detail_playlist,
             on_play_track,
             on_play_queue,
+            on_like_track,
+            on_unlike_playlist,
             on_select_playlist,
             on_create_playlist,
         }
@@ -354,7 +381,26 @@ impl PlaylistView {
         info_box.append(&title_lbl);
         info_box.append(&author_lbl);
 
-        // 3. Open button indicator
+        // 3. Unlike button & Open button indicator
+        let unlike_btn = gtk::Button::builder()
+            .icon_name("starred-symbolic")
+            .css_classes(["btn-card-like", "btn-heart-liked"])
+            .valign(gtk::Align::Center)
+            .tooltip_text("Unlike playlist")
+            .build();
+
+        let pl_id_unlike = playlist.id;
+        let unlike_cb = Rc::clone(&self.on_unlike_playlist);
+        let card_weak = card.downgrade();
+        unlike_btn.connect_clicked(move |_| {
+            if let Some(ref cb) = *unlike_cb.borrow() {
+                cb(pl_id_unlike);
+            }
+            if let Some(c) = card_weak.upgrade() {
+                c.set_opacity(0.4);
+            }
+        });
+
         let open_btn = gtk::Button::builder()
             .icon_name("go-next-symbolic")
             .css_classes(["btn-transport"])
@@ -363,6 +409,7 @@ impl PlaylistView {
 
         card.append(&cover_img);
         card.append(&info_box);
+        card.append(&unlike_btn);
         card.append(&open_btn);
 
         // Click on playlist card opens detail view
@@ -482,7 +529,43 @@ impl PlaylistView {
         meta_vbox.append(&title_lbl);
         meta_vbox.append(&artist_lbl);
 
-        // 4. Duration
+        // 4. Like button
+        let is_liked = track.user_favorite.unwrap_or(false);
+        let like_icon = if is_liked { "starred-symbolic" } else { "non-starred-symbolic" };
+        let like_tooltip = if is_liked { "Unlike track" } else { "Like track" };
+
+        let like_btn = gtk::Button::builder()
+            .icon_name(like_icon)
+            .css_classes(["btn-card-like"])
+            .valign(gtk::Align::Center)
+            .tooltip_text(like_tooltip)
+            .build();
+        if is_liked {
+            like_btn.add_css_class("btn-heart-liked");
+        }
+
+        let is_liked_cell = std::cell::Cell::new(is_liked);
+        let like_btn_c = like_btn.clone();
+        let track_like = track.clone();
+        let like_cb = Rc::clone(&self.on_like_track);
+        like_btn.connect_clicked(move |_| {
+            let next = !is_liked_cell.get();
+            is_liked_cell.set(next);
+            if next {
+                like_btn_c.add_css_class("btn-heart-liked");
+                like_btn_c.set_icon_name("starred-symbolic");
+                like_btn_c.set_tooltip_text(Some("Unlike track"));
+            } else {
+                like_btn_c.remove_css_class("btn-heart-liked");
+                like_btn_c.set_icon_name("non-starred-symbolic");
+                like_btn_c.set_tooltip_text(Some("Like track"));
+            }
+            if let Some(ref cb) = *like_cb.borrow() {
+                cb(track_like.clone(), next);
+            }
+        });
+
+        // 5. Duration
         let dur_lbl = gtk::Label::builder()
             .label(&track.duration_formatted())
             .css_classes(["time-label"])
@@ -492,6 +575,7 @@ impl PlaylistView {
         row.append(&idx_lbl);
         row.append(&play_btn);
         row.append(&meta_vbox);
+        row.append(&like_btn);
         row.append(&dur_lbl);
 
         // Click row to play
@@ -530,6 +614,14 @@ impl PlaylistView {
 
     pub fn connect_play_queue<F: Fn(Vec<Track>, usize) + 'static>(&self, f: F) {
         *self.on_play_queue.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_like_track<F: Fn(Track, bool) + 'static>(&self, f: F) {
+        *self.on_like_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_unlike_playlist<F: Fn(u64) + 'static>(&self, f: F) {
+        *self.on_unlike_playlist.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_select_playlist<F: Fn(u64) + 'static>(&self, f: F) {

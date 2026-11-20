@@ -27,6 +27,7 @@ pub struct ArtistProfileView {
     current_tracks: Rc<RefCell<Vec<Track>>>,
     is_following: Rc<Cell<bool>>,
     on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>>,
     on_play_all: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>)>>>>,
     on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_toggle_follow: Rc<RefCell<Option<Box<dyn Fn(u64, bool)>>>>,
@@ -211,6 +212,7 @@ impl ArtistProfileView {
         let is_following = Rc::new(Cell::new(false));
 
         let on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
+        let on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>> = Rc::new(RefCell::new(None));
         let on_play_all: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>)>>>> = Rc::new(RefCell::new(None));
         let on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
         let on_toggle_follow: Rc<RefCell<Option<Box<dyn Fn(u64, bool)>>>> = Rc::new(RefCell::new(None));
@@ -282,6 +284,7 @@ impl ArtistProfileView {
             current_tracks,
             is_following,
             on_play_track,
+            on_like_track,
             on_play_all,
             on_select_track,
             on_toggle_follow,
@@ -451,7 +454,43 @@ impl ArtistProfileView {
             .halign(gtk::Align::End)
             .build();
 
+        let is_liked = track.user_favorite.unwrap_or(false);
+        let like_icon = if is_liked { "starred-symbolic" } else { "non-starred-symbolic" };
+        let like_tooltip = if is_liked { "Unlike track" } else { "Like track" };
+
+        let like_btn = gtk::Button::builder()
+            .icon_name(like_icon)
+            .css_classes(["btn-card-like"])
+            .valign(gtk::Align::Center)
+            .tooltip_text(like_tooltip)
+            .build();
+        if is_liked {
+            like_btn.add_css_class("btn-heart-liked");
+        }
+
+        let is_liked_cell = std::cell::Cell::new(is_liked);
+        let like_btn_c = like_btn.clone();
+        let track_like = track.clone();
+        let like_cb = Rc::clone(&self.on_like_track);
+        like_btn.connect_clicked(move |_| {
+            let next = !is_liked_cell.get();
+            is_liked_cell.set(next);
+            if next {
+                like_btn_c.add_css_class("btn-heart-liked");
+                like_btn_c.set_icon_name("starred-symbolic");
+                like_btn_c.set_tooltip_text(Some("Unlike track"));
+            } else {
+                like_btn_c.remove_css_class("btn-heart-liked");
+                like_btn_c.set_icon_name("non-starred-symbolic");
+                like_btn_c.set_tooltip_text(Some("Like track"));
+            }
+            if let Some(ref cb) = *like_cb.borrow() {
+                cb(track_like.clone(), next);
+            }
+        });
+
         title_row.append(&title_lbl);
+        title_row.append(&like_btn);
         title_row.append(&dur_lbl);
 
         let wave = WaveformWidget::new(28);
@@ -508,6 +547,10 @@ impl ArtistProfileView {
 
     pub fn connect_play_track<F: Fn(Track) + 'static>(&self, f: F) {
         *self.on_play_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_like_track<F: Fn(Track, bool) + 'static>(&self, f: F) {
+        *self.on_like_track.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_play_all<F: Fn(Vec<Track>) + 'static>(&self, f: F) {

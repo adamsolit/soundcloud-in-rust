@@ -378,15 +378,10 @@ impl Application {
 
         // Like / Unlike from player bar
         let state_like = Rc::clone(&state_c);
+        let win_like = Rc::clone(&win_c);
         player_bar.connect_like(move |liked| {
             if let Some(ref track) = *state_like.current_track.borrow() {
-                let track_id = track.id;
-                let client = state_like.client.clone();
-                let db = state_like.db.clone();
-                glib::spawn_future_local(async move {
-                    let _ = client.toggle_like(track_id, liked).await;
-                    let _ = db.set_track_liked(track_id, liked);
-                });
+                handle_track_like_internal(&state_like, &win_like, track.clone(), liked);
             }
         });
     }
@@ -404,6 +399,12 @@ impl Application {
             glib::spawn_future_local(async move {
                 let _ = play_track_internal(&s, &w, track).await;
             });
+        });
+
+        let s_stm_like = Rc::clone(&state_c);
+        let w_stm_like = Rc::clone(&win_c);
+        self.window.stream_view.connect_like_track(move |track, liked| {
+            handle_track_like_internal(&s_stm_like, &w_stm_like, track, liked);
         });
 
         let s_sel = Rc::clone(&state_c);
@@ -461,6 +462,12 @@ impl Application {
             });
         });
 
+        let s_srch_like = Rc::clone(&state_c);
+        let w_srch_like = Rc::clone(&win_c);
+        self.window.search_view.connect_like_track(move |track, liked| {
+            handle_track_like_internal(&s_srch_like, &w_srch_like, track, liked);
+        });
+
         let s_srch_sel = Rc::clone(&state_c);
         let w_srch_sel = Rc::clone(&win_c);
         self.window.search_view.connect_select_track(move |track| {
@@ -504,6 +511,12 @@ impl Application {
             });
         });
 
+        let s_art_like = Rc::clone(&state_c);
+        let w_art_like = Rc::clone(&win_c);
+        self.window.artist_profile_view.connect_like_track(move |track, liked| {
+            handle_track_like_internal(&s_art_like, &w_art_like, track, liked);
+        });
+
         let s_art_sel = Rc::clone(&state_c);
         let w_art_sel = Rc::clone(&win_c);
         self.window.artist_profile_view.connect_select_track(move |track| {
@@ -532,6 +545,12 @@ impl Application {
             glib::spawn_future_local(async move {
                 let _ = play_track_internal(&s, &w, track).await;
             });
+        });
+
+        let s_lib_like = Rc::clone(&state_c);
+        let w_lib_like = Rc::clone(&win_c);
+        self.window.library_view.connect_like_track(move |track, liked| {
+            handle_track_like_internal(&s_lib_like, &w_lib_like, track, liked);
         });
 
         let s_lib_tab = Rc::clone(&state_c);
@@ -568,6 +587,27 @@ impl Application {
             let w = Rc::clone(&w_pl_play);
             glib::spawn_future_local(async move {
                 let _ = play_track_internal(&s, &w, track).await;
+            });
+        });
+
+        let s_pl_trk_like = Rc::clone(&state_c);
+        let w_pl_trk_like = Rc::clone(&win_c);
+        self.window.library_view.playlist_view.connect_like_track(move |track, liked| {
+            handle_track_like_internal(&s_pl_trk_like, &w_pl_trk_like, track, liked);
+        });
+
+        let s_pl_unlike = Rc::clone(&state_c);
+        let w_pl_unlike = Rc::clone(&win_c);
+        self.window.library_view.playlist_view.connect_unlike_playlist(move |playlist_id| {
+            let s = Rc::clone(&s_pl_unlike);
+            let w = Rc::clone(&w_pl_unlike);
+            glib::spawn_future_local(async move {
+                if let Err(e) = s.client.toggle_like_playlist(playlist_id, false).await {
+                    warn!("Failed to unlike playlist {}: {}", playlist_id, e);
+                }
+                if let Ok(pls) = s.client.get_my_playlists(30).await {
+                    w.library_view.set_playlists(pls);
+                }
             });
         });
 
@@ -1276,5 +1316,32 @@ fn show_artist_profile_internal(
         }
 
         w.artist_profile_view.set_loading(false);
+    });
+}
+
+fn handle_track_like_internal(
+    state: &Rc<AppState>,
+    window: &Rc<MainWindow>,
+    track: Track,
+    liked: bool,
+) {
+    let client = state.client.clone();
+    let db = state.db.clone();
+    let track_id = track.id;
+    let mut t = track;
+    t.user_favorite = Some(liked);
+    let _ = db.cache_track(&t, liked);
+    let _ = db.set_track_liked(track_id, liked);
+
+    if let Some(ref cur) = *state.current_track.borrow() {
+        if cur.id == track_id {
+            window.player_bar().update_like_ui(liked);
+        }
+    }
+
+    glib::spawn_future_local(async move {
+        if let Err(e) = client.toggle_like(track_id, liked).await {
+            warn!("Failed to toggle like on track {}: {}", track_id, e);
+        }
     });
 }

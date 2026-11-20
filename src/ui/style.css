@@ -316,6 +316,26 @@ scrollbar slider:hover {
     color: #ffffff;
 }
 
+.btn-card-like {
+    color: rgba(255, 255, 255, 0.35);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 2px 4px;
+    min-width: 26px;
+    min-height: 26px;
+    transition: all 120ms ease;
+}
+
+.btn-card-like:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.btn-card-like.btn-heart-liked {
+    color: #ffffff;
+}
+
 /* Time labels: Monospace Tabular Alignment to Eliminate Jitter */
 .time-label {
     font-size: 0.78rem;

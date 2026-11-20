@@ -19,6 +19,7 @@ pub struct SearchView {
     search_generation: Rc<std::cell::Cell<u64>>,
     on_search: Rc<RefCell<Option<Box<dyn Fn(String, SearchFilter)>>>>,
     on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>>,
     on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_select_user: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
 }
@@ -79,6 +80,7 @@ impl SearchView {
         let search_generation = Rc::new(std::cell::Cell::new(0u64));
         let on_search: Rc<RefCell<Option<Box<dyn Fn(String, SearchFilter)>>>> = Rc::new(RefCell::new(None));
         let on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
+        let on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>> = Rc::new(RefCell::new(None));
         let on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
         let on_select_user: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
 
@@ -182,6 +184,7 @@ impl SearchView {
             search_generation,
             on_search,
             on_play_track,
+            on_like_track,
             on_select_track,
             on_select_user,
         }
@@ -296,9 +299,42 @@ impl SearchView {
             .valign(gtk::Align::Center)
             .build();
 
+        let is_liked = track.user_favorite.unwrap_or(false);
+        let like_btn = gtk::Button::builder()
+            .icon_name(if is_liked { "starred-symbolic" } else { "non-starred-symbolic" })
+            .css_classes(["btn-card-like"])
+            .tooltip_text(if is_liked { "Unlike track" } else { "Like track" })
+            .valign(gtk::Align::Center)
+            .build();
+        if is_liked {
+            like_btn.add_css_class("btn-heart-liked");
+        }
+
+        let is_liked_cell = std::cell::Cell::new(is_liked);
+        let like_btn_c = like_btn.clone();
+        let track_like = track.clone();
+        let like_cb = Rc::clone(&self.on_like_track);
+        like_btn.connect_clicked(move |_| {
+            let next = !is_liked_cell.get();
+            is_liked_cell.set(next);
+            if next {
+                like_btn_c.add_css_class("btn-heart-liked");
+                like_btn_c.set_icon_name("starred-symbolic");
+                like_btn_c.set_tooltip_text(Some("Unlike track"));
+            } else {
+                like_btn_c.remove_css_class("btn-heart-liked");
+                like_btn_c.set_icon_name("non-starred-symbolic");
+                like_btn_c.set_tooltip_text(Some("Like track"));
+            }
+            if let Some(ref cb) = *like_cb.borrow() {
+                cb(track_like.clone(), next);
+            }
+        });
+
         row.append(&art_img);
         row.append(&play_btn);
         row.append(&info_box);
+        row.append(&like_btn);
         row.append(&dur_lbl);
 
         // Click row to play track immediately (consistent across app)
@@ -449,6 +485,10 @@ impl SearchView {
 
     pub fn connect_play_track<F: Fn(Track) + 'static>(&self, f: F) {
         *self.on_play_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_like_track<F: Fn(Track, bool) + 'static>(&self, f: F) {
+        *self.on_like_track.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_select_track<F: Fn(Track) + 'static>(&self, f: F) {

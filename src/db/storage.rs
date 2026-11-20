@@ -153,6 +153,17 @@ impl Database {
         Ok(())
     }
 
+    pub fn is_track_liked(&self, track_id: u64) -> bool {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT is_liked FROM cached_tracks WHERE id = ?1",
+            params![track_id as i64],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|v| v == 1)
+        .unwrap_or(false)
+    }
+
     pub fn record_playback(&self, track_id: u64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
