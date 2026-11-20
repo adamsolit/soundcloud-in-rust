@@ -339,7 +339,7 @@ impl StreamView {
 
         card.append(&content_box);
 
-        // Make card clickable to play track immediately (consistent with Library)
+        // Make artwork and waveform clickable to play track immediately
         let click_gesture = gtk::GestureClick::new();
         let track_for_play_card = track.clone();
         let play_cb_card = Rc::clone(&self.on_play_track);
@@ -348,7 +348,17 @@ impl StreamView {
                 cb(track_for_play_card.clone());
             }
         });
-        card.add_controller(click_gesture);
+        art_overlay.add_controller(click_gesture);
+
+        let wave_gesture = gtk::GestureClick::new();
+        let track_for_play_wave = track.clone();
+        let play_cb_wave = Rc::clone(&self.on_play_track);
+        wave_gesture.connect_pressed(move |_g, _n, _x, _y| {
+            if let Some(ref cb) = *play_cb_wave.borrow() {
+                cb(track_for_play_wave.clone());
+            }
+        });
+        wave.widget().add_controller(wave_gesture);
 
         // Click title to view comments & track details
         let title_gesture = gtk::GestureClick::new();

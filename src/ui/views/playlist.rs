@@ -340,7 +340,14 @@ impl PlaylistView {
             .hexpand(true)
             .build();
 
-        // 1. Cover artwork
+        // 1. Clickable area for opening the playlist
+        let click_area = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(14)
+            .hexpand(true)
+            .build();
+
+        // Cover artwork
         let cover_img = gtk::Image::builder()
             .pixel_size(56)
             .icon_name("media-playlist-consecutive-symbolic")
@@ -355,7 +362,7 @@ impl PlaylistView {
             "media-playlist-consecutive-symbolic",
         );
 
-        // 2. Info box
+        // Info box
         let info_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(3)
@@ -381,38 +388,10 @@ impl PlaylistView {
         info_box.append(&title_lbl);
         info_box.append(&author_lbl);
 
-        // 3. Unlike button & Open button indicator
-        let unlike_btn = gtk::Button::builder()
-            .icon_name("starred-symbolic")
-            .css_classes(["btn-card-like", "btn-heart-liked"])
-            .valign(gtk::Align::Center)
-            .tooltip_text("Unlike playlist")
-            .build();
+        click_area.append(&cover_img);
+        click_area.append(&info_box);
 
-        let pl_id_unlike = playlist.id;
-        let unlike_cb = Rc::clone(&self.on_unlike_playlist);
-        let card_weak = card.downgrade();
-        unlike_btn.connect_clicked(move |_| {
-            if let Some(ref cb) = *unlike_cb.borrow() {
-                cb(pl_id_unlike);
-            }
-            if let Some(c) = card_weak.upgrade() {
-                c.set_opacity(0.4);
-            }
-        });
-
-        let open_btn = gtk::Button::builder()
-            .icon_name("go-next-symbolic")
-            .css_classes(["btn-transport"])
-            .valign(gtk::Align::Center)
-            .build();
-
-        card.append(&cover_img);
-        card.append(&info_box);
-        card.append(&unlike_btn);
-        card.append(&open_btn);
-
-        // Click on playlist card opens detail view
+        // Click on click_area opens detail view
         let click_gesture = gtk::GestureClick::new();
         let pl_id = playlist.id;
         let select_cb = Rc::clone(&self.on_select_playlist);
@@ -421,7 +400,34 @@ impl PlaylistView {
                 cb(pl_id);
             }
         });
-        card.add_controller(click_gesture);
+        click_area.add_controller(click_gesture);
+
+        // 2. Unlike button & Open button indicator
+        let unlike_btn = gtk::Button::builder()
+            .icon_name("starred-symbolic")
+            .css_classes(["btn-card-like", "btn-heart-liked"])
+            .valign(gtk::Align::Center)
+            .tooltip_text("Unlike and remove playlist")
+            .build();
+
+        let pl_id_unlike = playlist.id;
+        let unlike_cb = Rc::clone(&self.on_unlike_playlist);
+        let card_weak = card.downgrade();
+        unlike_btn.connect_clicked(move |_| {
+            if let Some(c) = card_weak.upgrade() {
+                c.set_visible(false);
+            }
+            if let Some(ref cb) = *unlike_cb.borrow() {
+                cb(pl_id_unlike);
+            }
+        });
+
+        let open_btn = gtk::Button::builder()
+            .icon_name("go-next-symbolic")
+            .css_classes(["btn-transport"])
+            .valign(gtk::Align::Center)
+            .tooltip_text("Open playlist")
+            .build();
 
         let pl_id2 = playlist.id;
         let select_cb2 = Rc::clone(&self.on_select_playlist);
@@ -430,6 +436,10 @@ impl PlaylistView {
                 cb(pl_id2);
             }
         });
+
+        card.append(&click_area);
+        card.append(&unlike_btn);
+        card.append(&open_btn);
 
         card
     }
@@ -572,13 +582,17 @@ impl PlaylistView {
             .valign(gtk::Align::Center)
             .build();
 
-        row.append(&idx_lbl);
-        row.append(&play_btn);
-        row.append(&meta_vbox);
-        row.append(&like_btn);
-        row.append(&dur_lbl);
+        let click_area = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(12)
+            .hexpand(true)
+            .build();
 
-        // Click row to play
+        click_area.append(&idx_lbl);
+        click_area.append(&play_btn);
+        click_area.append(&meta_vbox);
+
+        // Click click_area to play
         let row_gesture = gtk::GestureClick::new();
         let queue_cb2 = Rc::clone(&self.on_play_queue);
         let all_tracks_clone2 = all_tracks;
@@ -587,7 +601,11 @@ impl PlaylistView {
                 cb(all_tracks_clone2.clone(), index);
             }
         });
-        row.add_controller(row_gesture);
+        click_area.add_controller(row_gesture);
+
+        row.append(&click_area);
+        row.append(&like_btn);
+        row.append(&dur_lbl);
 
         row
     }

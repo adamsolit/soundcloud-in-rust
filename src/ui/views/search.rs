@@ -331,13 +331,17 @@ impl SearchView {
             }
         });
 
-        row.append(&art_img);
-        row.append(&play_btn);
-        row.append(&info_box);
-        row.append(&like_btn);
-        row.append(&dur_lbl);
+        let click_area = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(12)
+            .hexpand(true)
+            .build();
 
-        // Click row to play track immediately (consistent across app)
+        click_area.append(&art_img);
+        click_area.append(&play_btn);
+        click_area.append(&info_box);
+
+        // Click click_area to play track immediately (consistent across app)
         let click_g = gtk::GestureClick::new();
         let track_play_row = track.clone();
         let play_cb_row = Rc::clone(&self.on_play_track);
@@ -346,7 +350,11 @@ impl SearchView {
                 cb(track_play_row.clone());
             }
         });
-        row.add_controller(click_g);
+        click_area.add_controller(click_g);
+
+        row.append(&click_area);
+        row.append(&like_btn);
+        row.append(&dur_lbl);
 
         // Click title to view track detail
         let title_g = gtk::GestureClick::new();

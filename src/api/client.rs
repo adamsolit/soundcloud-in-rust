@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use reqwest::Client;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::api::auth::SoundCloudSession;
 use crate::api::stream::resolve_stream_url;
@@ -437,9 +437,20 @@ impl SoundCloudClient {
         let client_id = self.ensure_valid_client_id().await?;
         let oauth_token = self.session.get_oauth_token().await;
 
-        let url = format!("{}/likes/playlists/{}?client_id={}", API_V2_BASE, playlist_id, client_id);
+        let user_id = match *self.session.user_id.read().await {
+            Some(id) => id,
+            None => {
+                let me = self.get_current_user().await?;
+                me.id
+            }
+        };
+
+        let url = format!(
+            "{}/users/{}/playlist_likes/{}?client_id={}",
+            API_V2_BASE, user_id, playlist_id, client_id
+        );
         let mut req = if is_liked {
-            self.http.post(&url)
+            self.http.put(&url)
         } else {
             self.http.delete(&url)
         };
@@ -450,7 +461,9 @@ impl SoundCloudClient {
 
         let resp = req.send().await.context("Toggling playlist like status")?;
         if !resp.status().is_success() {
-            debug!("SoundCloud remote playlist like endpoint returned {}, updated locally", resp.status());
+            warn!("SoundCloud remote playlist like endpoint returned {}: {}", resp.status(), resp.text().await.unwrap_or_default());
+        } else {
+            info!("Successfully updated playlist {} like status to {}", playlist_id, is_liked);
         }
         Ok(())
     }

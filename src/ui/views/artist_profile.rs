@@ -519,7 +519,7 @@ impl ArtistProfileView {
         info_box.append(&stats_row);
         card.append(&info_box);
 
-        // Click row to play track immediately
+        // Click artwork or waveform to play track immediately
         let click_g = gtk::GestureClick::new();
         let track_row_play = track.clone();
         let play_cb_row = Rc::clone(&self.on_play_track);
@@ -528,7 +528,17 @@ impl ArtistProfileView {
                 cb(track_row_play.clone());
             }
         });
-        card.add_controller(click_g);
+        art_overlay.add_controller(click_g);
+
+        let wave_g = gtk::GestureClick::new();
+        let track_wave_play = track.clone();
+        let play_cb_wave = Rc::clone(&self.on_play_track);
+        wave_g.connect_pressed(move |_g, _n, _x, _y| {
+            if let Some(ref cb) = *play_cb_wave.borrow() {
+                cb(track_wave_play.clone());
+            }
+        });
+        wave.widget().add_controller(wave_g);
 
         // Click title to view detail
         let title_g = gtk::GestureClick::new();

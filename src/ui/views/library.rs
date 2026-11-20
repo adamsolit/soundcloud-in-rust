@@ -338,13 +338,17 @@ impl LibraryView {
             }
         });
 
-        row.append(&art_img);
-        row.append(&play_btn);
-        row.append(&info_box);
-        row.append(&like_btn);
-        row.append(&dur_lbl);
+        let click_area = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(12)
+            .hexpand(true)
+            .build();
 
-        // Click row to play
+        click_area.append(&art_img);
+        click_area.append(&play_btn);
+        click_area.append(&info_box);
+
+        // Click click_area to play
         let click_g = gtk::GestureClick::new();
         let track_c = track;
         let play_cb2 = Rc::clone(&self.on_play_track);
@@ -353,7 +357,11 @@ impl LibraryView {
                 cb(track_c.clone());
             }
         });
-        row.add_controller(click_g);
+        click_area.add_controller(click_g);
+
+        row.append(&click_area);
+        row.append(&like_btn);
+        row.append(&dur_lbl);
 
         row
     }
