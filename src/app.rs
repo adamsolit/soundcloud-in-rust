@@ -269,15 +269,18 @@ impl Application {
                     MprisCommand::Play => {
                         audio_clone.resume();
                         app_win.player_bar().update_playback_state(true);
+                        app_win.mini_player().update_playback_state(true);
                     }
                     MprisCommand::Pause => {
                         audio_clone.pause();
                         app_win.player_bar().update_playback_state(false);
+                        app_win.mini_player().update_playback_state(false);
                     }
                     MprisCommand::PlayPause => {
                         audio_clone.toggle_play_pause();
                         let playing = audio_clone.get_state() == crate::audio::PlaybackState::Playing;
                         app_win.player_bar().update_playback_state(playing);
+                        app_win.mini_player().update_playback_state(playing);
                     }
                     MprisCommand::Next => {
                         let next = audio_clone.get_queue().lock().unwrap().next_track();
@@ -302,6 +305,7 @@ impl Application {
                     MprisCommand::Stop => {
                         audio_clone.stop();
                         app_win.player_bar().update_playback_state(false);
+                        app_win.mini_player().update_playback_state(false);
                     }
                     MprisCommand::Seek(offset_ms) => {
                         let current_pos = audio_clone.get_position_ms();
@@ -332,8 +336,13 @@ impl Application {
                 let pos = audio_c.get_position_ms();
                 let dur = audio_c.get_duration_ms();
                 win_c.player_bar().update_position(pos, dur);
+                win_c.mini_player().update_position(pos, dur);
                 if win_c.track_detail_view.widget().is_visible() {
                     win_c.track_detail_view.update_position(pos, dur);
+                }
+
+                if let Some(ref m) = *state_sync.mpris.borrow() {
+                    m.handler.set_position_micros(pos * 1000);
                 }
 
                 // Auto-save playback state every ~5 seconds (60 ticks * 80ms = 4.8s)
@@ -368,11 +377,26 @@ impl Application {
                             let _ = play_track_internal(&state_c, &win_c, track).await;
                         } else {
                             win_c.player_bar().update_playback_state(false);
+                            win_c.mini_player().update_playback_state(false);
+                            if let Some(ref m) = *state_c.mpris.borrow() {
+                                m.update_status(mpris_server::PlaybackStatus::Stopped).await;
+                            }
                         }
                     }
                     crate::audio::AudioEvent::StateChanged(st) => {
                         let is_playing = st == crate::audio::PlaybackState::Playing;
                         win_c.player_bar().update_playback_state(is_playing);
+                        win_c.mini_player().update_playback_state(is_playing);
+                        if let Some(ref m) = *state_c.mpris.borrow() {
+                            let status = if is_playing {
+                                mpris_server::PlaybackStatus::Playing
+                            } else if st == crate::audio::PlaybackState::Paused {
+                                mpris_server::PlaybackStatus::Paused
+                            } else {
+                                mpris_server::PlaybackStatus::Stopped
+                            };
+                            m.update_status(status).await;
+                        }
                     }
                     _ => {}
                 }
@@ -413,6 +437,7 @@ impl Application {
             audio_pp.toggle_play_pause();
             let playing = audio_pp.get_state() == crate::audio::PlaybackState::Playing;
             win_pp.player_bar().update_playback_state(playing);
+            win_pp.mini_player().update_playback_state(playing);
 
             if !playing {
                 if let Some(ref track) = *state_pp.current_track.borrow() {
@@ -421,13 +446,17 @@ impl Application {
                 }
             }
 
-            if let Some(ref m) = *mpris_pp.borrow() {
-                m.handler.set_playback_status(if playing {
-                    mpris_server::PlaybackStatus::Playing
-                } else {
-                    mpris_server::PlaybackStatus::Paused
-                });
-            }
+            let mpris_clone = Rc::clone(&mpris_pp);
+            glib::spawn_future_local(async move {
+                if let Some(ref m) = *mpris_clone.borrow() {
+                    let st = if playing {
+                        mpris_server::PlaybackStatus::Playing
+                    } else {
+                        mpris_server::PlaybackStatus::Paused
+                    };
+                    m.update_status(st).await;
+                }
+            });
         });
 
         // Seek from full-width waveform
@@ -439,6 +468,7 @@ impl Application {
                 if let Some(ref track) = *state_seek.current_track.borrow() {
                     let target_ms = (pct * track.duration as f64) as u64;
                     win_seek.player_bar().update_position(target_ms, track.duration);
+                    win_seek.mini_player().update_position(target_ms, track.duration);
                     let s = Rc::clone(&state_seek);
                     let w = Rc::clone(&win_seek);
                     let t = track.clone();
@@ -501,8 +531,15 @@ impl Application {
         let audio_shuf = Arc::clone(&audio_c);
         let win_shuf = Rc::clone(&win_c);
         player_bar.connect_shuffle(move || {
-            let active = audio_shuf.get_queue().lock().unwrap().toggle_shuffle();
+            let q_arc = audio_shuf.get_queue();
+            let mut q = q_arc.lock().unwrap();
+            let active = q.toggle_shuffle();
+            let curr = q.current.clone();
+            let items = q.items.clone();
+            drop(q);
             win_shuf.library_view.playlist_view.set_shuffle_active(active);
+            win_shuf.player_bar().set_shuffle(active);
+            win_shuf.player_bar().update_queue(curr.as_ref(), &items);
             active
         });
 
@@ -566,6 +603,131 @@ impl Application {
             drop(q);
             win_q_clr.player_bar().update_queue(curr.as_ref(), &[]);
         });
+
+        // Wire Mini Player controls
+        let mini = self.window.mini_player();
+
+        // Mini Play/Pause
+        let audio_mini_pp = Arc::clone(&audio_c);
+        let win_mini_pp = Rc::clone(&win_c);
+        let state_mini_pp = Rc::clone(&state_c);
+        let mpris_mini_pp = Rc::clone(&self.state.mpris);
+        mini.connect_play_pause(move || {
+            let st = audio_mini_pp.get_state();
+            let needs_stream = !audio_mini_pp.is_loaded()
+                || st == crate::audio::PlaybackState::Stopped
+                || state_mini_pp.pending_resume_pos.borrow().is_some();
+
+            if needs_stream {
+                if let Some(ref track) = *state_mini_pp.current_track.borrow() {
+                    let s = Rc::clone(&state_mini_pp);
+                    let w = Rc::clone(&win_mini_pp);
+                    let t = track.clone();
+                    let resume_pos = state_mini_pp.pending_resume_pos.borrow_mut().take().unwrap_or(0);
+                    glib::spawn_future_local(async move {
+                        let _ = play_track_internal_with_seek(&s, &w, t, resume_pos).await;
+                    });
+                    return;
+                }
+            }
+
+            audio_mini_pp.toggle_play_pause();
+            let playing = audio_mini_pp.get_state() == crate::audio::PlaybackState::Playing;
+            win_mini_pp.player_bar().update_playback_state(playing);
+            win_mini_pp.mini_player().update_playback_state(playing);
+
+            if !playing {
+                if let Some(ref track) = *state_mini_pp.current_track.borrow() {
+                    let pos = audio_mini_pp.get_position_ms();
+                    let _ = state_mini_pp.db.save_playback_state(track, pos);
+                }
+            }
+
+            let mpris_clone = Rc::clone(&mpris_mini_pp);
+            glib::spawn_future_local(async move {
+                if let Some(ref m) = *mpris_clone.borrow() {
+                    let st = if playing {
+                        mpris_server::PlaybackStatus::Playing
+                    } else {
+                        mpris_server::PlaybackStatus::Paused
+                    };
+                    m.update_status(st).await;
+                }
+            });
+        });
+
+        // Mini Next
+        let audio_mini_next = Arc::clone(&audio_c);
+        let state_mini_next = Rc::clone(&state_c);
+        let win_mini_next = Rc::clone(&win_c);
+        mini.connect_next(move || {
+            let next = audio_mini_next.get_queue().lock().unwrap().skip_next_track();
+            if let Some(t) = next {
+                let s_c = Rc::clone(&state_mini_next);
+                let w_c = Rc::clone(&win_mini_next);
+                glib::spawn_future_local(async move {
+                    let _ = play_track_internal(&s_c, &w_c, t).await;
+                });
+            }
+        });
+
+        // Mini Prev
+        let audio_mini_prev = Arc::clone(&audio_c);
+        let state_mini_prev = Rc::clone(&state_c);
+        let win_mini_prev = Rc::clone(&win_c);
+        mini.connect_prev(move || {
+            let prev = audio_mini_prev.get_queue().lock().unwrap().previous_track();
+            if let Some(t) = prev {
+                let s_c = Rc::clone(&state_mini_prev);
+                let w_c = Rc::clone(&win_mini_prev);
+                glib::spawn_future_local(async move {
+                    let _ = play_track_internal(&s_c, &w_c, t).await;
+                });
+            }
+        });
+
+        // Mini Seek
+        let audio_mini_seek = Arc::clone(&audio_c);
+        let state_mini_seek = Rc::clone(&state_c);
+        let win_mini_seek = Rc::clone(&win_c);
+        mini.connect_seek(move |pct| {
+            if !audio_mini_seek.is_loaded() || state_mini_seek.pending_resume_pos.borrow().is_some() {
+                if let Some(ref track) = *state_mini_seek.current_track.borrow() {
+                    let target_ms = (pct * track.duration as f64) as u64;
+                    win_mini_seek.player_bar().update_position(target_ms, track.duration);
+                    win_mini_seek.mini_player().update_position(target_ms, track.duration);
+                    let s = Rc::clone(&state_mini_seek);
+                    let w = Rc::clone(&win_mini_seek);
+                    let t = track.clone();
+                    state_mini_seek.pending_resume_pos.borrow_mut().take();
+                    glib::spawn_future_local(async move {
+                        let _ = play_track_internal_with_seek(&s, &w, t, target_ms).await;
+                    });
+                    return;
+                }
+            }
+
+            let dur = audio_mini_seek.get_duration_ms();
+            if dur > 0 {
+                let target_ms = (pct * dur as f64) as u64;
+                let _ = audio_mini_seek.seek(target_ms);
+            }
+        });
+
+        // Mini Like
+        let state_mini_like = Rc::clone(&state_c);
+        let win_mini_like = Rc::clone(&win_c);
+        mini.connect_like(move |liked| {
+            if let Some(ref track) = *state_mini_like.current_track.borrow() {
+                handle_track_like_internal(&state_mini_like, &win_mini_like, track.clone(), liked);
+            }
+        });
+
+        // Mini Restore
+        let win_mini_restore = Rc::clone(&win_c);
+        mini.connect_restore(move || {
+            win_mini_restore.toggle_mini_player();
+        });
     }
 
     fn wire_views(&self) {
@@ -573,6 +735,12 @@ impl Application {
         let win_c = Rc::clone(&self.window);
 
         // 1. Stream / Discover View
+        let s_stm_q_play = Rc::clone(&state_c);
+        let w_stm_q_play = Rc::clone(&win_c);
+        self.window.stream_view.connect_play_queue(move |tracks, idx| {
+            handle_play_queue_internal(&s_stm_q_play, &w_stm_q_play, tracks, idx);
+        });
+
         let s1 = Rc::clone(&state_c);
         let w1 = Rc::clone(&win_c);
         self.window.stream_view.connect_play_track(move |track| {
@@ -595,16 +763,10 @@ impl Application {
             show_track_detail_internal(&s_sel, &w_sel, track);
         });
 
-        let audio_q_stm = Arc::clone(&state_c.audio);
-        let win_q_stm = Rc::clone(&win_c);
+        let s_stm_up_next = Rc::clone(&state_c);
+        let w_stm_up_next = Rc::clone(&win_c);
         self.window.stream_view.connect_queue_track(move |track| {
-            let q_arc = audio_q_stm.get_queue();
-            let mut q = q_arc.lock().unwrap();
-            q.add_tail(track);
-            let curr = q.current.clone();
-            let items = q.items.clone();
-            drop(q);
-            win_q_stm.player_bar().update_queue(curr.as_ref(), &items);
+            handle_add_to_up_next(&s_stm_up_next, &w_stm_up_next, track);
         });
 
         let s_stm_art = Rc::clone(&state_c);
@@ -652,6 +814,12 @@ impl Application {
             });
         });
 
+        let s_srch_q = Rc::clone(&state_c);
+        let w_srch_q = Rc::clone(&win_c);
+        self.window.search_view.connect_play_queue(move |tracks, idx| {
+            handle_play_queue_internal(&s_srch_q, &w_srch_q, tracks, idx);
+        });
+
         let s_srch_play = Rc::clone(&state_c);
         let w_srch_play = Rc::clone(&win_c);
         self.window.search_view.connect_play_track(move |track| {
@@ -680,19 +848,19 @@ impl Application {
             show_artist_profile_internal(&s_srch_usr, &w_srch_usr, user_id);
         });
 
-        let audio_q_srch = Arc::clone(&state_c.audio);
-        let win_q_srch = Rc::clone(&win_c);
+        let s_srch_up_next = Rc::clone(&state_c);
+        let w_srch_up_next = Rc::clone(&win_c);
         self.window.search_view.connect_queue_track(move |track| {
-            let q_arc = audio_q_srch.get_queue();
-            let mut q = q_arc.lock().unwrap();
-            q.add_tail(track);
-            let curr = q.current.clone();
-            let items = q.items.clone();
-            drop(q);
-            win_q_srch.player_bar().update_queue(curr.as_ref(), &items);
+            handle_add_to_up_next(&s_srch_up_next, &w_srch_up_next, track);
         });
 
         // 2b. Artist Profile View
+        let s_art_q = Rc::clone(&state_c);
+        let w_art_q = Rc::clone(&win_c);
+        self.window.artist_profile_view.connect_play_queue(move |tracks, idx| {
+            handle_play_queue_internal(&s_art_q, &w_art_q, tracks, idx);
+        });
+
         let s_art_play = Rc::clone(&state_c);
         let w_art_play = Rc::clone(&win_c);
         self.window.artist_profile_view.connect_play_track(move |track| {
@@ -706,21 +874,7 @@ impl Application {
         let s_art_all = Rc::clone(&state_c);
         let w_art_all = Rc::clone(&win_c);
         self.window.artist_profile_view.connect_play_all(move |tracks| {
-            if tracks.is_empty() {
-                return;
-            }
-            let s = Rc::clone(&s_art_all);
-            let w = Rc::clone(&w_art_all);
-            let first = tracks[0].clone();
-            let remaining = tracks[1..].to_vec();
-            {
-                let q_arc = s.audio.get_queue();
-                let mut q = q_arc.lock().unwrap();
-                q.items = remaining;
-            }
-            glib::spawn_future_local(async move {
-                let _ = play_track_internal(&s, &w, first).await;
-            });
+            handle_play_queue_internal(&s_art_all, &w_art_all, tracks, 0);
         });
 
         let s_art_like = Rc::clone(&state_c);
@@ -748,19 +902,19 @@ impl Application {
             w_art_back.go_back();
         });
 
-        let audio_q_art = Arc::clone(&state_c.audio);
-        let win_q_art = Rc::clone(&win_c);
+        let s_art_up_next = Rc::clone(&state_c);
+        let w_art_up_next = Rc::clone(&win_c);
         self.window.artist_profile_view.connect_queue_track(move |track| {
-            let q_arc = audio_q_art.get_queue();
-            let mut q = q_arc.lock().unwrap();
-            q.add_tail(track);
-            let curr = q.current.clone();
-            let items = q.items.clone();
-            drop(q);
-            win_q_art.player_bar().update_queue(curr.as_ref(), &items);
+            handle_add_to_up_next(&s_art_up_next, &w_art_up_next, track);
         });
 
         // 3. Library View
+        let s_lib_q = Rc::clone(&state_c);
+        let w_lib_q = Rc::clone(&win_c);
+        self.window.library_view.connect_play_queue(move |tracks, idx| {
+            handle_play_queue_internal(&s_lib_q, &w_lib_q, tracks, idx);
+        });
+
         let s_lib_play = Rc::clone(&state_c);
         let w_lib_play = Rc::clone(&win_c);
         self.window.library_view.connect_play_track(move |track| {
@@ -775,6 +929,18 @@ impl Application {
         let w_lib_like = Rc::clone(&win_c);
         self.window.library_view.connect_like_track(move |track, liked| {
             handle_track_like_internal(&s_lib_like, &w_lib_like, track, liked);
+        });
+
+        let s_lib_sel = Rc::clone(&state_c);
+        let w_lib_sel = Rc::clone(&win_c);
+        self.window.library_view.connect_select_track(move |track| {
+            show_track_detail_internal(&s_lib_sel, &w_lib_sel, track);
+        });
+
+        let s_lib_art = Rc::clone(&state_c);
+        let w_lib_art = Rc::clone(&win_c);
+        self.window.library_view.connect_artist_click(move |user_id| {
+            show_artist_profile_internal(&s_lib_art, &w_lib_art, user_id);
         });
 
         let s_lib_tab = Rc::clone(&state_c);
@@ -803,19 +969,19 @@ impl Application {
             }
         });
 
-        let audio_q_lib = Arc::clone(&state_c.audio);
-        let win_q_lib = Rc::clone(&win_c);
+        let s_lib_up_next = Rc::clone(&state_c);
+        let w_lib_up_next = Rc::clone(&win_c);
         self.window.library_view.connect_queue_track(move |track| {
-            let q_arc = audio_q_lib.get_queue();
-            let mut q = q_arc.lock().unwrap();
-            q.add_tail(track);
-            let curr = q.current.clone();
-            let items = q.items.clone();
-            drop(q);
-            win_q_lib.player_bar().update_queue(curr.as_ref(), &items);
+            handle_add_to_up_next(&s_lib_up_next, &w_lib_up_next, track);
         });
 
         // 4. Playlist View (inside Library)
+        let s_pl_q = Rc::clone(&state_c);
+        let w_pl_q = Rc::clone(&win_c);
+        self.window.library_view.playlist_view.connect_play_queue(move |tracks, start_idx| {
+            handle_play_queue_internal(&s_pl_q, &w_pl_q, tracks, start_idx);
+        });
+
         let s_pl_play = Rc::clone(&state_c);
         let w_pl_play = Rc::clone(&win_c);
         self.window.library_view.playlist_view.connect_play_track(move |track| {
@@ -830,6 +996,24 @@ impl Application {
         let w_pl_trk_like = Rc::clone(&win_c);
         self.window.library_view.playlist_view.connect_like_track(move |track, liked| {
             handle_track_like_internal(&s_pl_trk_like, &w_pl_trk_like, track, liked);
+        });
+
+        let s_pl_det = Rc::clone(&state_c);
+        let w_pl_det = Rc::clone(&win_c);
+        self.window.library_view.playlist_view.connect_select_track(move |track| {
+            show_track_detail_internal(&s_pl_det, &w_pl_det, track);
+        });
+
+        let s_pl_art = Rc::clone(&state_c);
+        let w_pl_art = Rc::clone(&win_c);
+        self.window.library_view.playlist_view.connect_artist_click(move |user_id| {
+            show_artist_profile_internal(&s_pl_art, &w_pl_art, user_id);
+        });
+
+        let s_pl_up_next = Rc::clone(&state_c);
+        let w_pl_up_next = Rc::clone(&win_c);
+        self.window.library_view.playlist_view.connect_queue_track(move |track| {
+            handle_add_to_up_next(&s_pl_up_next, &w_pl_up_next, track);
         });
 
         let s_pl_unlike = Rc::clone(&state_c);
@@ -847,30 +1031,17 @@ impl Application {
             });
         });
 
-        let s_pl_q = Rc::clone(&state_c);
-        let w_pl_q = Rc::clone(&win_c);
-        self.window.library_view.playlist_view.connect_play_queue(move |tracks, start_idx| {
-            if tracks.is_empty() {
-                return;
-            }
-            let s = Rc::clone(&s_pl_q);
-            let w = Rc::clone(&w_pl_q);
-
-            // Set up queue using set_queue so original order is preserved and shuffle state is respected
-            let first_track = s.audio.get_queue().lock().unwrap().set_queue(tracks, start_idx);
-
-            if let Some(track) = first_track {
-                glib::spawn_future_local(async move {
-                    let _ = play_track_internal(&s, &w, track).await;
-                });
-            }
-        });
-
         let audio_pl_shuf = Arc::clone(&self.state.audio);
         let win_pl_shuf = Rc::clone(&self.window);
         self.window.library_view.playlist_view.connect_shuffle_toggled(move |active| {
-            audio_pl_shuf.get_queue().lock().unwrap().set_shuffle(active);
+            let q_arc = audio_pl_shuf.get_queue();
+            let mut q = q_arc.lock().unwrap();
+            q.set_shuffle(active);
+            let curr = q.current.clone();
+            let items = q.items.clone();
+            drop(q);
             win_pl_shuf.player_bar().set_shuffle(active);
+            win_pl_shuf.player_bar().update_queue(curr.as_ref(), &items);
         });
 
         let s_pl_sel = Rc::clone(&state_c);
@@ -1371,9 +1542,14 @@ impl Application {
                 .unwrap_or(None)
                 .unwrap_or_else(|| crate::api::waveform::generate_synthetic_waveform(saved.track.id, 100));
 
-            self.window.player_bar().set_track(&saved.track, samples);
+            self.window.player_bar().set_track(&saved.track, samples.clone());
             self.window.player_bar().update_position(saved.position_ms, saved.track.duration);
             self.window.player_bar().update_playback_state(false);
+
+            self.window.mini_player().set_track(&saved.track, samples);
+            self.window.mini_player().update_position(saved.position_ms, saved.track.duration);
+            self.window.mini_player().update_playback_state(false);
+
             *self.state.current_track.borrow_mut() = Some(saved.track.clone());
             *self.state.pending_resume_pos.borrow_mut() = Some(saved.position_ms);
             self.state.audio.get_queue().lock().unwrap().current = Some(saved.track);
@@ -1448,6 +1624,63 @@ async fn sync_user_data_internal(
     Ok(())
 }
 
+fn handle_play_queue_internal(
+    state: &Rc<AppState>,
+    window: &Rc<MainWindow>,
+    tracks: Vec<Track>,
+    start_idx: usize,
+) {
+    if tracks.is_empty() {
+        return;
+    }
+    let first_track = {
+        let q_arc = state.audio.get_queue();
+        let mut q = q_arc.lock().unwrap();
+        let track = q.set_queue(tracks, start_idx);
+        let curr = q.current.clone();
+        let items = q.items.clone();
+        drop(q);
+        window.player_bar().update_queue(curr.as_ref(), &items);
+        track
+    };
+
+    if let Some(track) = first_track {
+        let s = Rc::clone(state);
+        let w = Rc::clone(window);
+        glib::spawn_future_local(async move {
+            let _ = play_track_internal(&s, &w, track).await;
+        });
+    }
+}
+
+fn handle_add_to_up_next(
+    state: &Rc<AppState>,
+    window: &Rc<MainWindow>,
+    track: Track,
+) {
+    let is_idle = {
+        let q_arc = state.audio.get_queue();
+        let mut q = q_arc.lock().unwrap();
+        let idle = q.current.is_none() || state.audio.get_state() != crate::audio::PlaybackState::Playing;
+        if !idle {
+            q.add_next(track.clone());
+            let curr = q.current.clone();
+            let items = q.items.clone();
+            drop(q);
+            window.player_bar().update_queue(curr.as_ref(), &items);
+        }
+        idle
+    };
+
+    if is_idle {
+        let s = Rc::clone(state);
+        let w = Rc::clone(window);
+        glib::spawn_future_local(async move {
+            let _ = play_track_internal(&s, &w, track).await;
+        });
+    }
+}
+
 async fn play_track_internal(
     state: &Rc<AppState>,
     window: &Rc<MainWindow>,
@@ -1489,12 +1722,15 @@ async fn play_track_internal_with_seek(
         return Ok(());
     }
 
-    // 2. Update UI PlayerBar immediately
+    // 2. Update UI PlayerBar & MiniPlayer immediately
     window.player_bar().set_track(&track, samples.clone());
+    window.mini_player().set_track(&track, samples.clone());
     if seek_to_ms > 0 {
         window.player_bar().update_position(seek_to_ms, track.duration);
+        window.mini_player().update_position(seek_to_ms, track.duration);
     }
     window.player_bar().update_playback_state(true);
+    window.mini_player().update_playback_state(true);
 
     *state.current_track.borrow_mut() = Some(track.clone());
 
@@ -1509,6 +1745,7 @@ async fn play_track_internal_with_seek(
                 error!("Audio engine error playing stream: {}", e);
                 state.audio.stop();
                 window.player_bar().update_playback_state(false);
+                window.mini_player().update_playback_state(false);
             } else {
                 // Record history and cache track in database
                 let _ = state.db.cache_track(&track, false);
@@ -1543,6 +1780,7 @@ async fn play_track_internal_with_seek(
             error!("Could not resolve stream URL for track {}: {}", track.id, e);
             state.audio.stop();
             window.player_bar().update_playback_state(false);
+            window.mini_player().update_playback_state(false);
         }
     }
 
@@ -1572,8 +1810,14 @@ fn show_track_detail_internal(
         // Fetch comments asynchronously
         let client = s_c.client.clone();
         let w_c = Rc::clone(&win_c);
-        if let Ok(comments) = client.get_comments(track_id, 60).await {
-            w_c.track_detail_view.set_comments(comments, dur);
+        match client.get_comments(track_id, 60).await {
+            Ok(comments) => {
+                info!("Fetched {} comments for track {}", comments.len(), track_id);
+                w_c.track_detail_view.set_comments(comments, dur);
+            }
+            Err(e) => {
+                warn!("Could not fetch comments for track {}: {}", track_id, e);
+            }
         }
     });
 }

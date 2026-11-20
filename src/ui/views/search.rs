@@ -19,10 +19,12 @@ pub struct SearchView {
     search_generation: Rc<std::cell::Cell<u64>>,
     on_search: Rc<RefCell<Option<Box<dyn Fn(String, SearchFilter)>>>>,
     on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    on_play_queue: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>, usize)>>>>,
     on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>>,
     on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_select_user: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
     on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    current_tracks: Rc<RefCell<Vec<Track>>>,
 }
 
 impl SearchView {
@@ -171,10 +173,12 @@ impl SearchView {
         });
 
         let on_play_track = Rc::new(RefCell::new(None));
+        let on_play_queue = Rc::new(RefCell::new(None));
         let on_like_track = Rc::new(RefCell::new(None));
         let on_select_track = Rc::new(RefCell::new(None));
         let on_select_user = Rc::new(RefCell::new(None));
         let on_queue_track = Rc::new(RefCell::new(None));
+        let current_tracks = Rc::new(RefCell::new(Vec::new()));
 
         Self {
             container,
@@ -187,10 +191,12 @@ impl SearchView {
             search_generation,
             on_search,
             on_play_track,
+            on_play_queue,
             on_like_track,
             on_select_track,
             on_select_user,
             on_queue_track,
+            current_tracks,
         }
     }
 
@@ -221,10 +227,20 @@ impl SearchView {
             return;
         }
 
+        let mut tracks_list = Vec::new();
+        for item in &results.collection {
+            if let SearchResultItem::Track(t) = item {
+                tracks_list.push(t.clone());
+            }
+        }
+        *self.current_tracks.borrow_mut() = tracks_list;
+
+        let mut track_idx = 0;
         for item in results.collection {
             match item {
                 SearchResultItem::Track(track) => {
-                    let card = self.create_track_row(track);
+                    let card = self.create_track_row(track, track_idx);
+                    track_idx += 1;
                     self.results_box.append(&card);
                 }
                 SearchResultItem::Playlist(playlist) => {
@@ -240,7 +256,7 @@ impl SearchView {
         }
     }
 
-    fn create_track_row(&self, track: Track) -> gtk::Box {
+    fn create_track_row(&self, track: Track, track_idx: usize) -> gtk::Box {
         let row = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(12)
@@ -272,8 +288,13 @@ impl SearchView {
 
         let track_play = track.clone();
         let play_cb = Rc::clone(&self.on_play_track);
+        let queue_cb = Rc::clone(&self.on_play_queue);
+        let cur_tracks_c1 = Rc::clone(&self.current_tracks);
         play_btn.connect_clicked(move |_| {
-            if let Some(ref cb) = *play_cb.borrow() {
+            if let Some(ref cb) = *queue_cb.borrow() {
+                let tracks = cur_tracks_c1.borrow().clone();
+                cb(tracks, track_idx);
+            } else if let Some(ref cb) = *play_cb.borrow() {
                 cb(track_play.clone());
             }
         });
@@ -353,8 +374,13 @@ impl SearchView {
         let click_g = gtk::GestureClick::new();
         let track_play_row = track.clone();
         let play_cb_row = Rc::clone(&self.on_play_track);
+        let queue_cb_row = Rc::clone(&self.on_play_queue);
+        let cur_tracks_c2 = Rc::clone(&self.current_tracks);
         click_g.connect_pressed(move |_g, _n, _x, _y| {
-            if let Some(ref cb) = *play_cb_row.borrow() {
+            if let Some(ref cb) = *queue_cb_row.borrow() {
+                let tracks = cur_tracks_c2.borrow().clone();
+                cb(tracks, track_idx);
+            } else if let Some(ref cb) = *play_cb_row.borrow() {
                 cb(track_play_row.clone());
             }
         });
@@ -378,19 +404,24 @@ impl SearchView {
 
         // Right-click context menu
         let play_cb_ctx = Rc::clone(&self.on_play_track);
-        let queue_cb_ctx = Rc::clone(&self.on_queue_track);
+        let queue_cb_ctx = Rc::clone(&self.on_play_queue);
+        let cur_tracks_ctx = Rc::clone(&self.current_tracks);
+        let q_up_next_ctx = Rc::clone(&self.on_queue_track);
         let detail_cb_ctx = Rc::clone(&self.on_select_track);
         let artist_cb_ctx = Rc::clone(&self.on_select_user);
         let like_cb_ctx = Rc::clone(&self.on_like_track);
 
         let actions = crate::ui::context_menu::TrackActions {
             on_play: Some(Rc::new(move |t| {
-                if let Some(ref cb) = *play_cb_ctx.borrow() {
+                if let Some(ref cb) = *queue_cb_ctx.borrow() {
+                    let tracks = cur_tracks_ctx.borrow().clone();
+                    cb(tracks, track_idx);
+                } else if let Some(ref cb) = *play_cb_ctx.borrow() {
                     cb(t);
                 }
             })),
             on_add_to_queue: Some(Rc::new(move |t| {
-                if let Some(ref cb) = *queue_cb_ctx.borrow() {
+                if let Some(ref cb) = *q_up_next_ctx.borrow() {
                     cb(t);
                 }
             })),
@@ -537,6 +568,10 @@ impl SearchView {
 
     pub fn connect_play_track<F: Fn(Track) + 'static>(&self, f: F) {
         *self.on_play_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_play_queue<F: Fn(Vec<Track>, usize) + 'static>(&self, f: F) {
+        *self.on_play_queue.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_like_track<F: Fn(Track, bool) + 'static>(&self, f: F) {

@@ -24,9 +24,13 @@ pub struct LibraryView {
     tab_history_btn: gtk::Button,
     current_tab: Rc<RefCell<LibraryTab>>,
     on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    on_play_queue: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>, usize)>>>>,
     on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>>,
     on_tab_change: Rc<RefCell<Option<Box<dyn Fn(LibraryTab)>>>>,
     on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    on_artist_click: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
+    current_tracks: Rc<RefCell<Vec<Track>>>,
 }
 
 impl LibraryView {
@@ -120,9 +124,13 @@ impl LibraryView {
 
         let current_tab = Rc::new(RefCell::new(LibraryTab::Likes));
         let on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
+        let on_play_queue: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>, usize)>>>> = Rc::new(RefCell::new(None));
         let on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>> = Rc::new(RefCell::new(None));
         let on_tab_change: Rc<RefCell<Option<Box<dyn Fn(LibraryTab)>>>> = Rc::new(RefCell::new(None));
         let on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
+        let on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
+        let on_artist_click: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
+        let current_tracks = Rc::new(RefCell::new(Vec::new()));
 
         // Connect tab switching
         let stack_likes = stack.clone();
@@ -189,9 +197,13 @@ impl LibraryView {
             tab_history_btn,
             current_tab,
             on_play_track,
+            on_play_queue,
             on_like_track,
             on_tab_change,
             on_queue_track,
+            on_select_track,
+            on_artist_click,
+            current_tracks,
         }
     }
 
@@ -203,6 +215,8 @@ impl LibraryView {
         while let Some(child) = self.tracks_flow.first_child() {
             self.tracks_flow.remove(&child);
         }
+
+        *self.current_tracks.borrow_mut() = tracks.clone();
 
         if tracks.is_empty() {
             let tab = *self.current_tab.borrow();
@@ -221,8 +235,8 @@ impl LibraryView {
             return;
         }
 
-        for track in tracks {
-            let row = self.create_track_row(track);
+        for (index, track) in tracks.into_iter().enumerate() {
+            let row = self.create_track_row(track, index);
             self.tracks_flow.append(&row);
         }
     }
@@ -231,7 +245,7 @@ impl LibraryView {
         self.playlist_view.set_playlists(playlists);
     }
 
-    fn create_track_row(&self, track: Track) -> gtk::Box {
+    fn create_track_row(&self, track: Track, index: usize) -> gtk::Box {
         let row = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(12)
@@ -263,8 +277,13 @@ impl LibraryView {
 
         let track_play = track.clone();
         let play_cb = Rc::clone(&self.on_play_track);
+        let queue_cb = Rc::clone(&self.on_play_queue);
+        let cur_tracks_c1 = Rc::clone(&self.current_tracks);
         play_btn.connect_clicked(move |_| {
-            if let Some(ref cb) = *play_cb.borrow() {
+            if let Some(ref cb) = *queue_cb.borrow() {
+                let tracks = cur_tracks_c1.borrow().clone();
+                cb(tracks, index);
+            } else if let Some(ref cb) = *play_cb.borrow() {
                 cb(track_play.clone());
             }
         });
@@ -355,8 +374,13 @@ impl LibraryView {
         let click_g = gtk::GestureClick::new();
         let track_for_play = track.clone();
         let play_cb2 = Rc::clone(&self.on_play_track);
+        let queue_cb2 = Rc::clone(&self.on_play_queue);
+        let cur_tracks_c2 = Rc::clone(&self.current_tracks);
         click_g.connect_pressed(move |_g, _n, _x, _y| {
-            if let Some(ref cb) = *play_cb2.borrow() {
+            if let Some(ref cb) = *queue_cb2.borrow() {
+                let tracks = cur_tracks_c2.borrow().clone();
+                cb(tracks, index);
+            } else if let Some(ref cb) = *play_cb2.borrow() {
                 cb(track_for_play.clone());
             }
         });
@@ -368,22 +392,37 @@ impl LibraryView {
 
         // Right-click context menu
         let play_cb_ctx = Rc::clone(&self.on_play_track);
-        let queue_cb_ctx = Rc::clone(&self.on_queue_track);
+        let queue_cb_ctx = Rc::clone(&self.on_play_queue);
+        let cur_tracks_ctx = Rc::clone(&self.current_tracks);
+        let q_up_next_ctx = Rc::clone(&self.on_queue_track);
         let like_cb_ctx = Rc::clone(&self.on_like_track);
+        let detail_cb_ctx = Rc::clone(&self.on_select_track);
+        let artist_cb_ctx = Rc::clone(&self.on_artist_click);
 
         let actions = crate::ui::context_menu::TrackActions {
             on_play: Some(Rc::new(move |t| {
-                if let Some(ref cb) = *play_cb_ctx.borrow() {
+                if let Some(ref cb) = *queue_cb_ctx.borrow() {
+                    let tracks = cur_tracks_ctx.borrow().clone();
+                    cb(tracks, index);
+                } else if let Some(ref cb) = *play_cb_ctx.borrow() {
                     cb(t);
                 }
             })),
             on_add_to_queue: Some(Rc::new(move |t| {
-                if let Some(ref cb) = *queue_cb_ctx.borrow() {
+                if let Some(ref cb) = *q_up_next_ctx.borrow() {
                     cb(t);
                 }
             })),
-            on_view_details: None,
-            on_artist_profile: None,
+            on_view_details: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *detail_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_artist_profile: Some(Rc::new(move |u| {
+                if let Some(ref cb) = *artist_cb_ctx.borrow() {
+                    cb(u);
+                }
+            })),
             on_toggle_like: Some(Rc::new(move |t, s| {
                 if let Some(ref cb) = *like_cb_ctx.borrow() {
                     cb(t, s);
@@ -399,6 +438,10 @@ impl LibraryView {
         *self.on_play_track.borrow_mut() = Some(Box::new(f));
     }
 
+    pub fn connect_play_queue<F: Fn(Vec<Track>, usize) + 'static>(&self, f: F) {
+        *self.on_play_queue.borrow_mut() = Some(Box::new(f));
+    }
+
     pub fn connect_like_track<F: Fn(Track, bool) + 'static>(&self, f: F) {
         *self.on_like_track.borrow_mut() = Some(Box::new(f));
     }
@@ -409,5 +452,13 @@ impl LibraryView {
 
     pub fn connect_queue_track<F: Fn(Track) + 'static>(&self, f: F) {
         *self.on_queue_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_select_track<F: Fn(Track) + 'static>(&self, f: F) {
+        *self.on_select_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_artist_click<F: Fn(u64) + 'static>(&self, f: F) {
+        *self.on_artist_click.borrow_mut() = Some(Box::new(f));
     }
 }

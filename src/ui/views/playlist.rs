@@ -27,6 +27,8 @@ pub struct PlaylistView {
     on_select_playlist: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
     on_create_playlist: Rc<RefCell<Option<Box<dyn Fn(CreatePlaylistPayload)>>>>,
     on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    on_artist_click: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
 }
 
 impl PlaylistView {
@@ -173,6 +175,8 @@ impl PlaylistView {
         let on_select_playlist: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
         let on_create_playlist: Rc<RefCell<Option<Box<dyn Fn(CreatePlaylistPayload)>>>> = Rc::new(RefCell::new(None));
         let on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
+        let on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
+        let on_artist_click: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
 
         let play_actions_row = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -307,6 +311,8 @@ impl PlaylistView {
             on_select_playlist,
             on_create_playlist,
             on_queue_track,
+            on_select_track,
+            on_artist_click,
         }
     }
 
@@ -614,6 +620,8 @@ impl PlaylistView {
         let play_cb_ctx = Rc::clone(&self.on_play_track);
         let queue_cb_ctx = Rc::clone(&self.on_queue_track);
         let like_cb_ctx = Rc::clone(&self.on_like_track);
+        let detail_cb_ctx = Rc::clone(&self.on_select_track);
+        let artist_cb_ctx = Rc::clone(&self.on_artist_click);
 
         let actions = crate::ui::context_menu::TrackActions {
             on_play: Some(Rc::new(move |t| {
@@ -626,8 +634,16 @@ impl PlaylistView {
                     cb(t);
                 }
             })),
-            on_view_details: None,
-            on_artist_profile: None,
+            on_view_details: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *detail_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            on_artist_profile: Some(Rc::new(move |u| {
+                if let Some(ref cb) = *artist_cb_ctx.borrow() {
+                    cb(u);
+                }
+            })),
             on_toggle_like: Some(Rc::new(move |t, s| {
                 if let Some(ref cb) = *like_cb_ctx.borrow() {
                     cb(t, s);
@@ -681,6 +697,14 @@ impl PlaylistView {
 
     pub fn connect_queue_track<F: Fn(Track) + 'static>(&self, f: F) {
         *self.on_queue_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_select_track<F: Fn(Track) + 'static>(&self, f: F) {
+        *self.on_select_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_artist_click<F: Fn(u64) + 'static>(&self, f: F) {
+        *self.on_artist_click.borrow_mut() = Some(Box::new(f));
     }
 }
 

@@ -107,6 +107,13 @@ fn test_playback_queue_logic() {
     assert_eq!(removed.unwrap().id, 2);
     assert_eq!(queue.items.iter().map(|t| t.id).collect::<Vec<_>>(), vec![3]);
 
+    // Test add_next (Add to Up Next) places track at index 0 of upcoming items
+    let t_next = create_dummy_track(99, "Up Next Track");
+    queue.add_next(t_next.clone());
+    assert_eq!(queue.items[0].id, 99);
+    let skipped_up_next = queue.skip_next_track();
+    assert_eq!(skipped_up_next.unwrap().id, 99);
+
     queue.clear();
     assert!(queue.items.is_empty());
 }

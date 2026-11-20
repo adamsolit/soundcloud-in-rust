@@ -4,6 +4,7 @@ use mpris_server::{
     LoopStatus, Metadata, PlaybackRate, PlaybackStatus, PlayerInterface, Property,
     RootInterface, Server, Time, TrackId, Volume,
 };
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{error, info};
@@ -28,6 +29,7 @@ pub struct MprisHandler {
     playback_status: Arc<Mutex<PlaybackStatus>>,
     current_track: Arc<Mutex<Option<Track>>>,
     current_volume: Arc<Mutex<f64>>,
+    current_position_us: Arc<AtomicU64>,
 }
 
 impl MprisHandler {
@@ -37,6 +39,7 @@ impl MprisHandler {
             playback_status: Arc::new(Mutex::new(PlaybackStatus::Stopped)),
             current_track: Arc::new(Mutex::new(None)),
             current_volume: Arc::new(Mutex::new(1.0)),
+            current_position_us: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -50,6 +53,34 @@ impl MprisHandler {
 
     pub fn set_volume(&self, vol: f64) {
         *self.current_volume.lock().unwrap() = vol;
+    }
+
+    pub fn set_position_micros(&self, pos_us: u64) {
+        self.current_position_us.store(pos_us, Ordering::Relaxed);
+    }
+}
+
+fn build_metadata(track: Option<&Track>) -> Metadata {
+    if let Some(t) = track {
+        let mut b = Metadata::builder()
+            .title(&t.title)
+            .artist(vec![t.artist_name().to_string()])
+            .length(Time::from_micros((t.duration * 1000) as i64));
+
+        if let Ok(obj_path) = zbus::ObjectPath::try_from(format!("/org/mpris/MediaPlayer2/track/{}", t.id)) {
+            b = b.trackid(TrackId::from(obj_path));
+        }
+
+        if let Some(art) = t.best_artwork_url() {
+            b = b.art_url(art);
+        }
+        if let Some(url) = t.permalink_url.as_ref() {
+            b = b.url(url.clone());
+        }
+
+        b.build()
+    } else {
+        Metadata::new()
     }
 }
 
@@ -88,11 +119,11 @@ impl RootInterface for MprisHandler {
     }
 
     async fn identity(&self) -> fdo::Result<String> {
-        Ok("CloudPulse SoundCloud".to_string())
+        Ok("SoundCloud".to_string())
     }
 
     async fn desktop_entry(&self) -> fdo::Result<String> {
-        Ok("cloudpulse".to_string())
+        Ok("soundcloud".to_string())
     }
 
     async fn supported_uri_schemes(&self) -> fdo::Result<Vec<String>> {
@@ -183,23 +214,7 @@ impl PlayerInterface for MprisHandler {
 
     async fn metadata(&self) -> fdo::Result<Metadata> {
         let track_guard = self.current_track.lock().unwrap();
-        if let Some(ref track) = *track_guard {
-            let mut builder = Metadata::builder()
-                .title(&track.title)
-                .artist(vec![track.artist_name().to_string()])
-                .length(Time::from_micros((track.duration * 1000) as i64));
-
-            if let Some(art) = track.best_artwork_url() {
-                builder = builder.art_url(art);
-            }
-            if let Some(url) = track.permalink_url.as_ref() {
-                builder = builder.url(url.clone());
-            }
-
-            Ok(builder.build())
-        } else {
-            Ok(Metadata::new())
-        }
+        Ok(build_metadata(track_guard.as_ref()))
     }
 
     async fn volume(&self) -> fdo::Result<Volume> {
@@ -213,7 +228,8 @@ impl PlayerInterface for MprisHandler {
     }
 
     async fn position(&self) -> fdo::Result<Time> {
-        Ok(Time::from_micros(0))
+        let us = self.current_position_us.load(Ordering::Relaxed);
+        Ok(Time::from_micros(us as i64))
     }
 
     async fn minimum_rate(&self) -> fdo::Result<PlaybackRate> {
@@ -257,9 +273,9 @@ pub struct MprisService {
 impl MprisService {
     pub async fn start(cmd_tx: UnboundedSender<MprisCommand>) -> Result<Self> {
         let handler = MprisHandler::new(cmd_tx);
-        match Server::new("cloudpulse", handler.clone()).await {
+        match Server::new("soundcloud", handler.clone()).await {
             Ok(server) => {
-                info!("Registered MPRIS D-Bus interface: org.mpris.MediaPlayer2.cloudpulse");
+                info!("Registered MPRIS D-Bus interface: org.mpris.MediaPlayer2.soundcloud");
                 Ok(Self {
                     handler,
                     server: Some(server),
@@ -273,20 +289,9 @@ impl MprisService {
     }
 
     pub async fn update_metadata(&self, track: Option<&Track>) {
+        self.handler.set_track(track.cloned());
         if let Some(ref server) = self.server {
-            let metadata = if let Some(t) = track {
-                let mut b = Metadata::builder()
-                    .title(&t.title)
-                    .artist(vec![t.artist_name().to_string()])
-                    .length(Time::from_micros((t.duration * 1000) as i64));
-                if let Some(art) = t.best_artwork_url() {
-                    b = b.art_url(art);
-                }
-                b.build()
-            } else {
-                Metadata::new()
-            };
-
+            let metadata = build_metadata(track);
             let _ = server.properties_changed([Property::Metadata(metadata)]).await;
         }
     }

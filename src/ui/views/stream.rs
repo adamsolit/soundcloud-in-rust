@@ -13,12 +13,14 @@ pub struct StreamView {
     genre_box: gtk::Box,
     loading_spinner: gtk::Spinner,
     on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    on_play_queue: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>, usize)>>>>,
     on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>>,
     on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_genre_change: Rc<RefCell<Option<Box<dyn Fn(String)>>>>,
     on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_artist_click: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
     current_genre: Rc<RefCell<String>>,
+    current_tracks: Rc<RefCell<Vec<Track>>>,
 }
 
 impl StreamView {
@@ -92,12 +94,14 @@ impl StreamView {
         container.append(&scrolled);
 
         let on_play_track = Rc::new(RefCell::new(None));
+        let on_play_queue = Rc::new(RefCell::new(None));
         let on_like_track = Rc::new(RefCell::new(None));
         let on_select_track = Rc::new(RefCell::new(None));
         let on_genre_change = Rc::new(RefCell::new(None));
         let on_queue_track = Rc::new(RefCell::new(None));
         let on_artist_click = Rc::new(RefCell::new(None));
         let current_genre = Rc::new(RefCell::new("my_stream".to_string()));
+        let current_tracks = Rc::new(RefCell::new(Vec::new()));
 
         let view = Self {
             container,
@@ -105,12 +109,14 @@ impl StreamView {
             genre_box,
             loading_spinner,
             on_play_track,
+            on_play_queue,
             on_like_track,
             on_select_track,
             on_genre_change,
             on_queue_track,
             on_artist_click,
             current_genre,
+            current_tracks,
         };
 
         let default_genres = vec![
@@ -180,6 +186,8 @@ impl StreamView {
             self.tracks_flow.remove(&child);
         }
 
+        *self.current_tracks.borrow_mut() = tracks.clone();
+
         if tracks.is_empty() {
             let empty_label = gtk::Label::builder()
                 .label("No tracks found in this category.")
@@ -190,13 +198,13 @@ impl StreamView {
             return;
         }
 
-        for track in tracks {
-            let card = self.create_track_card(track);
+        for (index, track) in tracks.into_iter().enumerate() {
+            let card = self.create_track_card(track, index);
             self.tracks_flow.append(&card);
         }
     }
 
-    fn create_track_card(&self, track: Track) -> gtk::Box {
+    fn create_track_card(&self, track: Track, index: usize) -> gtk::Box {
         let card = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(14)
@@ -235,8 +243,13 @@ impl StreamView {
 
         let track_for_play = track.clone();
         let play_cb = Rc::clone(&self.on_play_track);
+        let queue_cb = Rc::clone(&self.on_play_queue);
+        let cur_tracks_c1 = Rc::clone(&self.current_tracks);
         play_btn.connect_clicked(move |_| {
-            if let Some(ref cb) = *play_cb.borrow() {
+            if let Some(ref cb) = *queue_cb.borrow() {
+                let tracks = cur_tracks_c1.borrow().clone();
+                cb(tracks, index);
+            } else if let Some(ref cb) = *play_cb.borrow() {
                 cb(track_for_play.clone());
             }
         });
@@ -349,8 +362,13 @@ impl StreamView {
         let click_gesture = gtk::GestureClick::new();
         let track_for_play_card = track.clone();
         let play_cb_card = Rc::clone(&self.on_play_track);
+        let queue_cb_card = Rc::clone(&self.on_play_queue);
+        let cur_tracks_c2 = Rc::clone(&self.current_tracks);
         click_gesture.connect_pressed(move |_g, _n, _x, _y| {
-            if let Some(ref cb) = *play_cb_card.borrow() {
+            if let Some(ref cb) = *queue_cb_card.borrow() {
+                let tracks = cur_tracks_c2.borrow().clone();
+                cb(tracks, index);
+            } else if let Some(ref cb) = *play_cb_card.borrow() {
                 cb(track_for_play_card.clone());
             }
         });
@@ -359,8 +377,13 @@ impl StreamView {
         let wave_gesture = gtk::GestureClick::new();
         let track_for_play_wave = track.clone();
         let play_cb_wave = Rc::clone(&self.on_play_track);
+        let queue_cb_wave = Rc::clone(&self.on_play_queue);
+        let cur_tracks_c3 = Rc::clone(&self.current_tracks);
         wave_gesture.connect_pressed(move |_g, _n, _x, _y| {
-            if let Some(ref cb) = *play_cb_wave.borrow() {
+            if let Some(ref cb) = *queue_cb_wave.borrow() {
+                let tracks = cur_tracks_c3.borrow().clone();
+                cb(tracks, index);
+            } else if let Some(ref cb) = *play_cb_wave.borrow() {
                 cb(track_for_play_wave.clone());
             }
         });
@@ -380,19 +403,24 @@ impl StreamView {
 
         // Right-click context menu
         let play_cb_ctx = Rc::clone(&self.on_play_track);
-        let queue_cb_ctx = Rc::clone(&self.on_queue_track);
+        let queue_cb_ctx = Rc::clone(&self.on_play_queue);
+        let cur_tracks_ctx = Rc::clone(&self.current_tracks);
+        let q_up_next_ctx = Rc::clone(&self.on_queue_track);
         let detail_cb_ctx = Rc::clone(&self.on_select_track);
         let artist_cb_ctx = Rc::clone(&self.on_artist_click);
         let like_cb_ctx = Rc::clone(&self.on_like_track);
 
         let actions = crate::ui::context_menu::TrackActions {
             on_play: Some(Rc::new(move |t| {
-                if let Some(ref cb) = *play_cb_ctx.borrow() {
+                if let Some(ref cb) = *queue_cb_ctx.borrow() {
+                    let tracks = cur_tracks_ctx.borrow().clone();
+                    cb(tracks, index);
+                } else if let Some(ref cb) = *play_cb_ctx.borrow() {
                     cb(t);
                 }
             })),
             on_add_to_queue: Some(Rc::new(move |t| {
-                if let Some(ref cb) = *queue_cb_ctx.borrow() {
+                if let Some(ref cb) = *q_up_next_ctx.borrow() {
                     cb(t);
                 }
             })),
@@ -419,6 +447,10 @@ impl StreamView {
 
     pub fn connect_play_track<F: Fn(Track) + 'static>(&self, f: F) {
         *self.on_play_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_play_queue<F: Fn(Vec<Track>, usize) + 'static>(&self, f: F) {
+        *self.on_play_queue.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_like_track<F: Fn(Track, bool) + 'static>(&self, f: F) {

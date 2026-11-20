@@ -15,6 +15,7 @@ pub struct MainWindow {
     sidebar: Rc<Sidebar>,
     view_stack: gtk::Stack,
     player_bar: Rc<PlayerBar>,
+    pub mini_player: Rc<crate::ui::mini_player::MiniPlayerWindow>,
     pub header: adw::HeaderBar,
     pub body_box: gtk::Box,
     pub is_mini_player: Rc<std::cell::Cell<bool>>,
@@ -223,11 +224,23 @@ impl MainWindow {
         let is_mini_player = Rc::new(std::cell::Cell::new(false));
         let normal_size = Rc::new(std::cell::Cell::new((1120, 760)));
 
+        let mini_player = Rc::new(crate::ui::mini_player::MiniPlayerWindow::new(app));
+        let win_for_close = window.clone();
+        let is_mini_close = Rc::clone(&is_mini_player);
+        mini_player.window().connect_close_request(move |mini_w| {
+            is_mini_close.set(false);
+            mini_w.set_visible(false);
+            win_for_close.set_visible(true);
+            win_for_close.present();
+            glib::Propagation::Stop
+        });
+
         Self {
             window,
             sidebar,
             view_stack,
             player_bar,
+            mini_player,
             header,
             body_box,
             is_mini_player,
@@ -247,22 +260,22 @@ impl MainWindow {
         }
     }
 
+    pub fn mini_player(&self) -> &crate::ui::mini_player::MiniPlayerWindow {
+        &self.mini_player
+    }
+
     pub fn toggle_mini_player(&self) {
         let is_mini = self.is_mini_player.get();
         if is_mini {
             self.is_mini_player.set(false);
-            self.header.set_visible(true);
-            self.body_box.set_visible(true);
-            let (w, h) = self.normal_size.get();
-            self.window.set_default_size(w, h);
+            self.mini_player.window().set_visible(false);
+            self.window.set_visible(true);
+            self.window.present();
         } else {
-            let w = self.window.default_width();
-            let h = self.window.default_height();
-            self.normal_size.set((w, h));
             self.is_mini_player.set(true);
-            self.header.set_visible(false);
-            self.body_box.set_visible(false);
-            self.window.set_default_size(440, 105);
+            self.window.set_visible(false);
+            self.mini_player.window().set_visible(true);
+            self.mini_player.window().present();
         }
     }
 

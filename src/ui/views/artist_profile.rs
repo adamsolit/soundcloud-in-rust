@@ -27,6 +27,7 @@ pub struct ArtistProfileView {
     current_tracks: Rc<RefCell<Vec<Track>>>,
     is_following: Rc<Cell<bool>>,
     on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    on_play_queue: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>, usize)>>>>,
     on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>>,
     on_play_all: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>)>>>>,
     on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
@@ -213,6 +214,7 @@ impl ArtistProfileView {
         let is_following = Rc::new(Cell::new(false));
 
         let on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
+        let on_play_queue: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>, usize)>>>> = Rc::new(RefCell::new(None));
         let on_like_track: Rc<RefCell<Option<Box<dyn Fn(Track, bool)>>>> = Rc::new(RefCell::new(None));
         let on_play_all: Rc<RefCell<Option<Box<dyn Fn(Vec<Track>)>>>> = Rc::new(RefCell::new(None));
         let on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
@@ -286,6 +288,7 @@ impl ArtistProfileView {
             current_tracks,
             is_following,
             on_play_track,
+            on_play_queue,
             on_like_track,
             on_play_all,
             on_select_track,
@@ -376,13 +379,13 @@ impl ArtistProfileView {
             return;
         }
 
-        for track in tracks {
-            let card = self.create_track_card(track);
+        for (index, track) in tracks.into_iter().enumerate() {
+            let card = self.create_track_card(track, index);
             self.tracks_flow.append(&card);
         }
     }
 
-    fn create_track_card(&self, track: Track) -> gtk::Box {
+    fn create_track_card(&self, track: Track, index: usize) -> gtk::Box {
         let card = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(14)
@@ -526,8 +529,13 @@ impl ArtistProfileView {
         let click_g = gtk::GestureClick::new();
         let track_row_play = track.clone();
         let play_cb_row = Rc::clone(&self.on_play_track);
+        let queue_cb_row = Rc::clone(&self.on_play_queue);
+        let cur_tracks_c1 = Rc::clone(&self.current_tracks);
         click_g.connect_pressed(move |_g, _n, _x, _y| {
-            if let Some(ref cb) = *play_cb_row.borrow() {
+            if let Some(ref cb) = *queue_cb_row.borrow() {
+                let tracks = cur_tracks_c1.borrow().clone();
+                cb(tracks, index);
+            } else if let Some(ref cb) = *play_cb_row.borrow() {
                 cb(track_row_play.clone());
             }
         });
@@ -536,8 +544,13 @@ impl ArtistProfileView {
         let wave_g = gtk::GestureClick::new();
         let track_wave_play = track.clone();
         let play_cb_wave = Rc::clone(&self.on_play_track);
+        let queue_cb_wave = Rc::clone(&self.on_play_queue);
+        let cur_tracks_c2 = Rc::clone(&self.current_tracks);
         wave_g.connect_pressed(move |_g, _n, _x, _y| {
-            if let Some(ref cb) = *play_cb_wave.borrow() {
+            if let Some(ref cb) = *queue_cb_wave.borrow() {
+                let tracks = cur_tracks_c2.borrow().clone();
+                cb(tracks, index);
+            } else if let Some(ref cb) = *play_cb_wave.borrow() {
                 cb(track_wave_play.clone());
             }
         });
@@ -557,18 +570,23 @@ impl ArtistProfileView {
 
         // Right-click context menu
         let play_cb_ctx = Rc::clone(&self.on_play_track);
-        let queue_cb_ctx = Rc::clone(&self.on_queue_track);
+        let queue_cb_ctx = Rc::clone(&self.on_play_queue);
+        let cur_tracks_ctx = Rc::clone(&self.current_tracks);
+        let q_up_next_ctx = Rc::clone(&self.on_queue_track);
         let detail_cb_ctx = Rc::clone(&self.on_select_track);
         let like_cb_ctx = Rc::clone(&self.on_like_track);
 
         let actions = crate::ui::context_menu::TrackActions {
             on_play: Some(Rc::new(move |t| {
-                if let Some(ref cb) = *play_cb_ctx.borrow() {
+                if let Some(ref cb) = *queue_cb_ctx.borrow() {
+                    let tracks = cur_tracks_ctx.borrow().clone();
+                    cb(tracks, index);
+                } else if let Some(ref cb) = *play_cb_ctx.borrow() {
                     cb(t);
                 }
             })),
             on_add_to_queue: Some(Rc::new(move |t| {
-                if let Some(ref cb) = *queue_cb_ctx.borrow() {
+                if let Some(ref cb) = *q_up_next_ctx.borrow() {
                     cb(t);
                 }
             })),
@@ -591,6 +609,10 @@ impl ArtistProfileView {
 
     pub fn connect_play_track<F: Fn(Track) + 'static>(&self, f: F) {
         *self.on_play_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_play_queue<F: Fn(Vec<Track>, usize) + 'static>(&self, f: F) {
+        *self.on_play_queue.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_like_track<F: Fn(Track, bool) + 'static>(&self, f: F) {

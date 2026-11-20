@@ -211,6 +211,43 @@ scrollbar slider:hover {
     font-weight: 500;
 }
 
+/* Mini Player Floating Obsidian Widget */
+window.mini-player-window {
+    background-color: #0d0e12;
+    color: #f5f5f7;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+}
+
+.mini-player-card {
+    background-color: #0d0e12;
+}
+
+.mini-player-artwork {
+    border-radius: 8px;
+    background-color: #1a1c22;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mini-player-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.mini-player-artist {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #8e8e93;
+}
+
+.mini-player-time {
+    font-size: 0.70rem;
+    font-weight: 500;
+    color: #636366;
+    font-feature-settings: "tnum";
+}
+
 /* Bottom Persistent Player Bar */
 .player-bar {
     background-color: #0e0f13;

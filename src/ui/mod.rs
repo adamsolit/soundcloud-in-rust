@@ -1,5 +1,6 @@
 pub mod context_menu;
 pub mod image_loader;
+pub mod mini_player;
 pub mod player_bar;
 pub mod shortcuts_dialog;
 pub mod sidebar;

@@ -356,12 +356,18 @@ impl SoundCloudClient {
     /// Fetches comments for a track
     pub async fn get_comments(&self, track_id: u64, limit: usize) -> Result<Vec<Comment>> {
         let client_id = self.ensure_valid_client_id().await?;
+        let oauth_token = self.session.get_oauth_token().await;
         let url = format!(
-            "{}/tracks/{}/comments?client_id={}&limit={}",
+            "{}/tracks/{}/comments?client_id={}&limit={}&offset=0&threaded=0&filter_replies=0",
             API_V2_BASE, track_id, client_id, limit
         );
 
-        let resp = self.http.get(&url).send().await.context("Fetching track comments")?;
+        let mut req = self.http.get(&url);
+        if let Some(ref token) = oauth_token {
+            req = req.header("Authorization", format!("OAuth {}", token));
+        }
+
+        let resp = req.send().await.context("Fetching track comments")?;
         if !resp.status().is_success() {
             bail!("Failed to get comments: HTTP {}", resp.status());
         }
