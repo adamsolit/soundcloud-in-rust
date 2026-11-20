@@ -675,14 +675,14 @@ impl Application {
                 match s.client.get_current_user().await {
                     Ok(user) => {
                         w.settings_view.set_user_profile(Some(&user));
-                        w.sidebar().update_user_profile(Some(&user));
+                        w.update_user_profile(Some(&user));
                         w.settings_view.set_status(&format!("Connected successfully as @{}!", user.username), false);
                         let _ = sync_user_data_internal(&s, &w).await;
                     }
                     Err(e) => {
                         let _ = s.client.session.clear_credentials().await;
                         w.settings_view.set_user_profile(None);
-                        w.sidebar().update_user_profile(None);
+                        w.update_user_profile(None);
                         w.settings_view.set_status(&format!("Authentication failed: {}. Please verify that your oauth_token is valid.", e), true);
                     }
                 }
@@ -705,7 +705,7 @@ impl Application {
                     match s.client.get_current_user().await {
                         Ok(user) => {
                             w.settings_view.set_user_profile(Some(&user));
-                            w.sidebar().update_user_profile(Some(&user));
+                            w.update_user_profile(Some(&user));
                             w.settings_view.set_status(&format!("Auto-detected and connected as @{}!", user.username), false);
                             let _ = sync_user_data_internal(&s, &w).await;
                         }
@@ -730,7 +730,7 @@ impl Application {
             glib::spawn_future_local(async move {
                 let _ = s.client.session.clear_credentials().await;
                 w.settings_view.set_user_profile(None);
-                w.sidebar().update_user_profile(None);
+                w.update_user_profile(None);
                 w.settings_view.set_status("Signed out. Session credentials cleared from keyring.", false);
             });
         });
@@ -874,7 +874,7 @@ impl Application {
                     Ok(updated_user) => {
                         let _ = s.db.save_user_profile(&updated_user);
                         w.settings_view.set_user_profile(Some(&updated_user));
-                        w.sidebar().update_user_profile(Some(&updated_user));
+                        w.update_user_profile(Some(&updated_user));
                         w.settings_view.set_status("Profile updated successfully on SoundCloud!", false);
                     }
                     Err(e) => {
@@ -898,7 +898,7 @@ impl Application {
             // 1. Show cached profile immediately if available from previous sessions
             if let Ok(Some(cached_user)) = state_c.db.get_user_profile() {
                 win_c.settings_view.set_user_profile(Some(&cached_user));
-                win_c.sidebar().update_user_profile(Some(&cached_user));
+                win_c.update_user_profile(Some(&cached_user));
             }
 
             // 2. If not authenticated, check browser session cookies
@@ -915,7 +915,7 @@ impl Application {
                     Ok(user) => {
                         let _ = state_c.db.save_user_profile(&user);
                         win_c.settings_view.set_user_profile(Some(&user));
-                        win_c.sidebar().update_user_profile(Some(&user));
+                        win_c.update_user_profile(Some(&user));
                         win_c.messages_view.set_current_user_id(user.id);
                         info!("Session active for user @{}", user.username);
                         let _ = sync_user_data_internal(&state_c, &win_c).await;
@@ -947,13 +947,13 @@ impl Application {
                         // Keep cached profile if network is down
                         if state_c.db.get_user_profile().ok().flatten().is_none() {
                             win_c.settings_view.set_user_profile(None);
-                            win_c.sidebar().update_user_profile(None);
+                            win_c.update_user_profile(None);
                         }
                     }
                 }
             } else if state_c.db.get_user_profile().ok().flatten().is_none() {
                 win_c.settings_view.set_user_profile(None);
-                win_c.sidebar().update_user_profile(None);
+                win_c.update_user_profile(None);
             }
         });
 

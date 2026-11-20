@@ -15,6 +15,8 @@ pub struct MainWindow {
     sidebar: Rc<Sidebar>,
     view_stack: gtk::Stack,
     player_bar: Rc<PlayerBar>,
+    pub profile_avatar: gtk::Image,
+    pub btn_profile: gtk::Button,
     pub previous_view: Rc<std::cell::RefCell<String>>,
     pub stream_view: Rc<StreamView>,
     pub search_view: Rc<SearchView>,
@@ -57,7 +59,22 @@ impl MainWindow {
             .show_start_title_buttons(true)
             .build();
 
-        // Top-right header buttons for Messages & Notifications overlays
+        // Top-right header buttons for Profile, Notifications & Messages
+        let profile_avatar = gtk::Image::builder()
+            .pixel_size(26)
+            .icon_name("avatar-default-symbolic")
+            .css_classes(["header-profile-avatar"])
+            .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .build();
+
+        let btn_profile = gtk::Button::builder()
+            .child(&profile_avatar)
+            .css_classes(["header-profile-btn"])
+            .tooltip_text("Account & Preferences")
+            .valign(gtk::Align::Center)
+            .build();
+
         let btn_messages = gtk::Button::builder()
             .icon_name("mail-unread-symbolic")
             .css_classes(["btn-transport"])
@@ -117,6 +134,8 @@ impl MainWindow {
             msg_pop_clone.popup();
         });
 
+        // pack_end places widgets from right to left: Profile (right), Notifications (mid), Messages (left)
+        header.pack_end(&btn_profile);
         header.pack_end(&btn_notifications);
         header.pack_end(&btn_messages);
 
@@ -185,11 +204,23 @@ impl MainWindow {
             sidebar_clone.set_active(target);
         });
 
+        // Connect top-right profile button to open Account & Settings
+        let stack_for_prof = view_stack.clone();
+        let sidebar_for_prof = Rc::clone(&sidebar);
+        let prev_view_prof = Rc::clone(&previous_view);
+        btn_profile.connect_clicked(move |_| {
+            *prev_view_prof.borrow_mut() = "settings".to_string();
+            stack_for_prof.set_visible_child_name("settings");
+            sidebar_for_prof.set_active(NavTarget::Settings);
+        });
+
         Self {
             window,
             sidebar,
             view_stack,
             player_bar,
+            profile_avatar,
+            btn_profile,
             previous_view,
             stream_view,
             search_view,
@@ -200,6 +231,23 @@ impl MainWindow {
             upload_view,
             track_detail_view,
             settings_view,
+        }
+    }
+
+    pub fn update_user_profile(&self, user: Option<&crate::models::user::UserProfile>) {
+        if let Some(u) = user {
+            self.btn_profile
+                .set_tooltip_text(Some(&format!("@{} (Account & Preferences)", u.username)));
+            crate::ui::image_loader::load_into_image(
+                &self.profile_avatar,
+                u.avatar_url.as_deref(),
+                "avatar-default-symbolic",
+            );
+        } else {
+            self.btn_profile
+                .set_tooltip_text(Some("Account & Preferences (Sign In)"));
+            self.profile_avatar
+                .set_icon_name(Some("avatar-default-symbolic"));
         }
     }
 

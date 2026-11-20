@@ -21,9 +21,6 @@ pub enum NavTarget {
 pub struct Sidebar {
     container: gtk::Box,
     buttons: Vec<(NavTarget, gtk::Button)>,
-    user_avatar: gtk::Image,
-    user_name_lbl: gtk::Label,
-    user_status_lbl: gtk::Label,
     on_navigate: Rc<RefCell<Option<Box<dyn Fn(NavTarget)>>>>,
 }
 
@@ -124,71 +121,15 @@ impl Sidebar {
             });
         }
 
-        // Bottom spacer to push user pill down
+        // Bottom spacer to push content up cleanly
         let spacer = gtk::Box::builder()
             .vexpand(true)
             .build();
         container.append(&spacer);
 
-        // Bottom User Profile Pill
-        let user_pill_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(10)
-            .build();
-
-        let user_avatar = gtk::Image::builder()
-            .pixel_size(36)
-            .icon_name("avatar-default-symbolic")
-            .css_classes(["track-card-artwork"])
-            .build();
-
-        let user_text_vbox = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(2)
-            .valign(gtk::Align::Center)
-            .hexpand(true)
-            .build();
-
-        let user_name_lbl = gtk::Label::builder()
-            .label("Guest Mode")
-            .css_classes(["track-card-title"])
-            .halign(gtk::Align::Start)
-            .ellipsize(gtk::pango::EllipsizeMode::End)
-            .build();
-
-        let user_status_lbl = gtk::Label::builder()
-            .label("Sign in via Settings")
-            .css_classes(["badge-guest"])
-            .halign(gtk::Align::Start)
-            .build();
-
-        user_text_vbox.append(&user_name_lbl);
-        user_text_vbox.append(&user_status_lbl);
-
-        user_pill_box.append(&user_avatar);
-        user_pill_box.append(&user_text_vbox);
-
-        let user_pill_btn = gtk::Button::builder()
-            .child(&user_pill_box)
-            .css_classes(["sidebar-user-pill"])
-            .tooltip_text("Open Settings & Account")
-            .build();
-
-        let nav_cb_user = Rc::clone(&on_navigate);
-        user_pill_btn.connect_clicked(move |_| {
-            if let Some(ref cb) = *nav_cb_user.borrow() {
-                cb(NavTarget::Settings);
-            }
-        });
-
-        container.append(&user_pill_btn);
-
         Self {
             container,
             buttons,
-            user_avatar,
-            user_name_lbl,
-            user_status_lbl,
             on_navigate,
         }
     }
@@ -207,25 +148,8 @@ impl Sidebar {
         }
     }
 
-    pub fn update_user_profile(&self, user: Option<&UserProfile>) {
-        if let Some(u) = user {
-            self.user_name_lbl.set_label(&format!("@{}", u.username));
-            self.user_status_lbl.set_label("Connected");
-            self.user_status_lbl.remove_css_class("badge-guest");
-            self.user_status_lbl.add_css_class("badge-connected");
-
-            crate::ui::image_loader::load_into_image(
-                &self.user_avatar,
-                u.avatar_url.as_deref(),
-                "avatar-default-symbolic",
-            );
-        } else {
-            self.user_name_lbl.set_label("Guest Mode");
-            self.user_status_lbl.set_label("Sign in via Settings");
-            self.user_status_lbl.remove_css_class("badge-connected");
-            self.user_status_lbl.add_css_class("badge-guest");
-            self.user_avatar.set_icon_name(Some("avatar-default-symbolic"));
-        }
+    pub fn update_user_profile(&self, _user: Option<&UserProfile>) {
+        // User profile is now rendered in top-right headerbar
     }
 
     pub fn connect_navigate<F: Fn(NavTarget) + 'static>(&self, f: F) {

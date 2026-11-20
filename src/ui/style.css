@@ -49,6 +49,32 @@ headerbar .title {
     letter-spacing: -0.2px;
 }
 
+/* Header Profile Button & Avatar */
+.header-profile-btn {
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+    margin-left: 4px;
+    transition: background-color 120ms ease;
+}
+
+.header-profile-btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.header-profile-btn:active {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+.header-profile-avatar {
+    border-radius: 50%;
+    background-color: #18191f;
+    border: 1.5px solid rgba(255, 255, 255, 0.14);
+}
+
 /* Scrolled Viewport Transparency */
 scrolledwindow {
     background-color: transparent;
