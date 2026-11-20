@@ -2,7 +2,7 @@ use gtk4 as gtk;
 use gtk::gdk;
 use gtk::glib;
 use gtk::prelude::*;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::models::user::UserProfile;
@@ -21,37 +21,49 @@ pub enum NavTarget {
 pub struct Sidebar {
     container: gtk::Box,
     buttons: Vec<(NavTarget, gtk::Button)>,
+    labels: Vec<gtk::Label>,
+    btn_boxes: Vec<gtk::Box>,
+    brand_box: gtk::Box,
+    brand_icon: gtk::Image,
+    brand_label: gtk::Label,
+    btn_toggle: gtk::Button,
+    is_collapsed: Rc<Cell<bool>>,
     on_navigate: Rc<RefCell<Option<Box<dyn Fn(NavTarget)>>>>,
+    on_collapse_changed: Rc<RefCell<Option<Box<dyn Fn(bool)>>>>,
 }
 
 impl Sidebar {
     pub fn new() -> Self {
+        let is_collapsed = Rc::new(Cell::new(false));
+
         let container = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(6)
             .css_classes(["sidebar-panel"])
-            .width_request(200)
+            .width_request(158)
             .build();
 
-        // Brand logo header with official SoundCloud vector icon
+        // Brand logo header with official SoundCloud vector icon & collapse button
         let brand_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
-            .spacing(10)
-            .margin_top(8)
-            .margin_bottom(18)
-            .margin_start(8)
+            .spacing(8)
+            .margin_top(4)
+            .margin_bottom(14)
+            .margin_start(2)
+            .margin_end(2)
+            .hexpand(true)
             .build();
 
         let svg_bytes = glib::Bytes::from_static(include_bytes!("../../assets/soundcloud.svg"));
         let texture = gdk::Texture::from_bytes(&svg_bytes).ok();
-        let icon = gtk::Image::builder()
-            .pixel_size(28)
+        let brand_icon = gtk::Image::builder()
+            .pixel_size(24)
             .valign(gtk::Align::Center)
             .build();
         if let Some(ref t) = texture {
-            icon.set_paintable(Some(t));
+            brand_icon.set_paintable(Some(t));
         } else {
-            icon.set_icon_name(Some("weather-overcast-symbolic"));
+            brand_icon.set_icon_name(Some("weather-overcast-symbolic"));
         }
 
         let brand_label = gtk::Label::builder()
@@ -59,10 +71,20 @@ impl Sidebar {
             .css_classes(["brand-label"])
             .halign(gtk::Align::Start)
             .valign(gtk::Align::Center)
+            .hexpand(true)
             .build();
 
-        brand_box.append(&icon);
+        let btn_toggle = gtk::Button::builder()
+            .icon_name("pan-start-symbolic")
+            .css_classes(["btn-sidebar-toggle"])
+            .tooltip_text("Collapse Sidebar (Ctrl+B)")
+            .valign(gtk::Align::Center)
+            .halign(gtk::Align::End)
+            .build();
+
+        brand_box.append(&brand_icon);
         brand_box.append(&brand_label);
+        brand_box.append(&btn_toggle);
         container.append(&brand_box);
 
         let nav_items = [
@@ -74,22 +96,28 @@ impl Sidebar {
         ];
 
         let mut buttons = Vec::new();
+        let mut labels = Vec::new();
+        let mut btn_boxes = Vec::new();
         let on_navigate: Rc<RefCell<Option<Box<dyn Fn(NavTarget)>>>> = Rc::new(RefCell::new(None));
+        let on_collapse_changed: Rc<RefCell<Option<Box<dyn Fn(bool)>>>> = Rc::new(RefCell::new(None));
 
         for (target, icon_name, label_text) in nav_items {
             let btn_box = gtk::Box::builder()
                 .orientation(gtk::Orientation::Horizontal)
-                .spacing(12)
+                .spacing(10)
+                .halign(gtk::Align::Start)
                 .build();
 
             let btn_icon = gtk::Image::builder()
                 .icon_name(icon_name)
                 .pixel_size(18)
+                .valign(gtk::Align::Center)
                 .build();
 
             let label = gtk::Label::builder()
                 .label(label_text)
                 .halign(gtk::Align::Start)
+                .valign(gtk::Align::Center)
                 .hexpand(true)
                 .build();
 
@@ -100,6 +128,7 @@ impl Sidebar {
                 .child(&btn_box)
                 .css_classes(["nav-button"])
                 .halign(gtk::Align::Fill)
+                .tooltip_text(label_text)
                 .build();
 
             if target == NavTarget::Discover {
@@ -108,6 +137,8 @@ impl Sidebar {
 
             container.append(&btn);
             buttons.push((target, btn));
+            labels.push(label);
+            btn_boxes.push(btn_box);
         }
 
         // Connect button activations
@@ -127,10 +158,66 @@ impl Sidebar {
             .build();
         container.append(&spacer);
 
+        // Connect toggle button
+        let is_col_toggle = Rc::clone(&is_collapsed);
+        let container_toggle = container.clone();
+        let brand_icon_toggle = brand_icon.clone();
+        let brand_label_toggle = brand_label.clone();
+        let brand_box_toggle = brand_box.clone();
+        let btn_toggle_clone = btn_toggle.clone();
+        let labels_toggle = labels.clone();
+        let btn_boxes_toggle = btn_boxes.clone();
+        let on_col_cb = Rc::clone(&on_collapse_changed);
+
+        btn_toggle.connect_clicked(move |_| {
+            let next = !is_col_toggle.get();
+            is_col_toggle.set(next);
+            if next {
+                container_toggle.set_width_request(54);
+                container_toggle.add_css_class("collapsed");
+                brand_icon_toggle.set_visible(false);
+                brand_label_toggle.set_visible(false);
+                brand_box_toggle.set_halign(gtk::Align::Center);
+                btn_toggle_clone.set_icon_name("pan-end-symbolic");
+                btn_toggle_clone.set_tooltip_text(Some("Expand Sidebar (Ctrl+B)"));
+                for l in &labels_toggle {
+                    l.set_visible(false);
+                }
+                for b in &btn_boxes_toggle {
+                    b.set_halign(gtk::Align::Center);
+                }
+            } else {
+                container_toggle.set_width_request(158);
+                container_toggle.remove_css_class("collapsed");
+                brand_icon_toggle.set_visible(true);
+                brand_label_toggle.set_visible(true);
+                brand_box_toggle.set_halign(gtk::Align::Fill);
+                btn_toggle_clone.set_icon_name("pan-start-symbolic");
+                btn_toggle_clone.set_tooltip_text(Some("Collapse Sidebar (Ctrl+B)"));
+                for l in &labels_toggle {
+                    l.set_visible(true);
+                }
+                for b in &btn_boxes_toggle {
+                    b.set_halign(gtk::Align::Start);
+                }
+            }
+            if let Some(ref cb) = *on_col_cb.borrow() {
+                cb(next);
+            }
+        });
+
         Self {
             container,
             buttons,
+            labels,
+            btn_boxes,
+            brand_box,
+            brand_icon,
+            brand_label,
+            btn_toggle,
+            is_collapsed,
             on_navigate,
+            on_collapse_changed,
         }
     }
 
@@ -146,6 +233,55 @@ impl Sidebar {
                 btn.remove_css_class("active");
             }
         }
+    }
+
+    pub fn toggle(&self) {
+        let next = !self.is_collapsed.get();
+        self.set_collapsed(next);
+    }
+
+    pub fn set_collapsed(&self, collapsed: bool) {
+        self.is_collapsed.set(collapsed);
+        if collapsed {
+            self.container.set_width_request(54);
+            self.container.add_css_class("collapsed");
+            self.brand_icon.set_visible(false);
+            self.brand_label.set_visible(false);
+            self.brand_box.set_halign(gtk::Align::Center);
+            self.btn_toggle.set_icon_name("pan-end-symbolic");
+            self.btn_toggle.set_tooltip_text(Some("Expand Sidebar (Ctrl+B)"));
+            for l in &self.labels {
+                l.set_visible(false);
+            }
+            for b in &self.btn_boxes {
+                b.set_halign(gtk::Align::Center);
+            }
+        } else {
+            self.container.set_width_request(158);
+            self.container.remove_css_class("collapsed");
+            self.brand_icon.set_visible(true);
+            self.brand_label.set_visible(true);
+            self.brand_box.set_halign(gtk::Align::Fill);
+            self.btn_toggle.set_icon_name("pan-start-symbolic");
+            self.btn_toggle.set_tooltip_text(Some("Collapse Sidebar (Ctrl+B)"));
+            for l in &self.labels {
+                l.set_visible(true);
+            }
+            for b in &self.btn_boxes {
+                b.set_halign(gtk::Align::Start);
+            }
+        }
+        if let Some(ref cb) = *self.on_collapse_changed.borrow() {
+            cb(collapsed);
+        }
+    }
+
+    pub fn is_collapsed(&self) -> bool {
+        self.is_collapsed.get()
+    }
+
+    pub fn connect_collapse_changed<F: Fn(bool) + 'static>(&self, f: F) {
+        *self.on_collapse_changed.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn update_user_profile(&self, _user: Option<&UserProfile>) {

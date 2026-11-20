@@ -85,6 +85,25 @@ impl Application {
         app.add_action(&action_quit);
         app.set_accels_for_action("app.quit", &["<Control>q", "<Control>w"]);
 
+        // Register Ctrl+B and F9 global accelerators to toggle sidebar
+        let action_toggle_sidebar = gtk4::gio::SimpleAction::new("toggle-sidebar", None);
+        let sidebar_toggle_act = Rc::clone(&application.window.sidebar());
+        let db_toggle = application.state.db.clone();
+        action_toggle_sidebar.connect_activate(move |_, _| {
+            sidebar_toggle_act.toggle();
+            let state_str = if sidebar_toggle_act.is_collapsed() { "true" } else { "false" };
+            let _ = db_toggle.set_setting("sidebar_collapsed", state_str);
+        });
+        app.add_action(&action_toggle_sidebar);
+        app.set_accels_for_action("app.toggle-sidebar", &["<Control>b", "F9"]);
+
+        // Persist collapse state on mouse click
+        let db_col_persist = application.state.db.clone();
+        application.window.sidebar().connect_collapse_changed(move |collapsed| {
+            let state_str = if collapsed { "true" } else { "false" };
+            let _ = db_col_persist.set_setting("sidebar_collapsed", state_str);
+        });
+
         Ok(application)
     }
 
@@ -905,6 +924,13 @@ impl Application {
     }
 
     fn load_initial_data(&self) {
+        // Restore sidebar collapse state if previously saved
+        if let Ok(Some(col_str)) = self.state.db.get_setting("sidebar_collapsed") {
+            if col_str == "true" || col_str == "1" {
+                self.window.sidebar().set_collapsed(true);
+            }
+        }
+
         let state_c = Rc::clone(&self.state);
         let win_c = Rc::clone(&self.window);
 
