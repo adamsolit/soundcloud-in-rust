@@ -6,3 +6,4 @@
 *.db-wal
 .cache/
 auth_session.json
+*.tar.gz
