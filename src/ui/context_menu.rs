@@ -11,6 +11,8 @@ pub struct TrackActions {
     pub on_view_details: Option<Rc<dyn Fn(Track)>>,
     pub on_artist_profile: Option<Rc<dyn Fn(u64)>>,
     pub on_toggle_like: Option<Rc<dyn Fn(Track, bool)>>,
+    pub on_stash_toggle: Option<Rc<dyn Fn(Track)>>,
+    pub is_stashed: Option<Rc<dyn Fn(u64) -> bool>>,
 }
 
 pub fn attach_track_context_menu(
@@ -127,6 +129,28 @@ pub fn attach_track_context_menu(
         menu_box.append(&btn);
     }
 
+    // 6. Download Track Offline / Stash Toggle
+    let stash_target_info = if let Some(on_stash) = actions.on_stash_toggle.clone() {
+        let is_st = if let Some(ref checker) = actions.is_stashed {
+            checker(track.id)
+        } else {
+            false
+        };
+        let label = if is_st { "Remove from Stash" } else { "Download Track Offline" };
+        let icon = if is_st { "emblem-ok-symbolic" } else { "folder-download-symbolic" };
+        let btn = make_item(icon, label);
+        let t = track.clone();
+        let pop = popover.clone();
+        btn.connect_clicked(move |_| {
+            pop.popdown();
+            on_stash(t.clone());
+        });
+        menu_box.append(&btn);
+        Some((btn, actions.is_stashed.clone(), track.id))
+    } else {
+        None
+    };
+
     // Separator before Copy Link
     let sep = gtk::Separator::builder()
         .orientation(gtk::Orientation::Horizontal)
@@ -135,7 +159,7 @@ pub fn attach_track_context_menu(
         .build();
     menu_box.append(&sep);
 
-    // 6. Copy Track Link
+    // 7. Copy Track Link
     let btn_copy = make_item("edit-copy-symbolic", "Copy Track Link");
     let url = track.permalink_url.clone().unwrap_or_else(|| {
         format!("https://soundcloud.com/track/{}", track.id)
@@ -158,6 +182,25 @@ pub fn attach_track_context_menu(
 
     let pop_gesture = popover.clone();
     gesture.connect_pressed(move |_g, _n, x, y| {
+        if let Some((ref btn, Some(ref checker), track_id)) = stash_target_info {
+            let is_st = checker(track_id);
+            let lbl_text = if is_st { "Remove from Stash" } else { "Download Track Offline" };
+            let icon_name = if is_st { "emblem-ok-symbolic" } else { "folder-download-symbolic" };
+            if let Some(child) = btn.child() {
+                if let Some(box_child) = child.downcast_ref::<gtk::Box>() {
+                    if let Some(first) = box_child.first_child() {
+                        if let Some(img) = first.downcast_ref::<gtk::Image>() {
+                            img.set_icon_name(Some(icon_name));
+                        }
+                    }
+                    if let Some(last) = box_child.last_child() {
+                        if let Some(lbl) = last.downcast_ref::<gtk::Label>() {
+                            lbl.set_label(lbl_text);
+                        }
+                    }
+                }
+            }
+        }
         let rect = gdk4::Rectangle::new(x as i32, y as i32, 1, 1);
         pop_gesture.set_pointing_to(Some(&rect));
         pop_gesture.popup();

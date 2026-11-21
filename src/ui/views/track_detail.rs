@@ -691,4 +691,8 @@ impl TrackDetailView {
     pub fn connect_stash<F: Fn() + 'static>(&self, f: F) {
         *self.on_stash_toggle.borrow_mut() = Some(Box::new(f));
     }
+
+    pub fn current_track_id(&self) -> Option<u64> {
+        self.current_track.borrow().as_ref().map(|t| t.id)
+    }
 }

@@ -13,22 +13,27 @@ pub struct PlayerBar {
     title_label: gtk::Label,
     artist_label: gtk::Label,
     like_btn: gtk::Button,
-    btn_bookmark: gtk::Button,
-    btn_stash: gtk::Button,
     btn_play_pause: gtk::Button,
     btn_prev: gtk::Button,
     btn_next: gtk::Button,
     btn_shuffle: gtk::Button,
     btn_repeat: gtk::Button,
-    btn_speed: gtk::Button,
-    btn_sleep: gtk::Button,
+    btn_more: gtk::Button,
+    more_stash_icon: gtk::Image,
+    more_stash_label: gtk::Label,
+    btn_more_stash: gtk::Button,
+    speed_slider: gtk::Scale,
+    speed_val_lbl: gtk::Label,
     sleep_status_lbl: gtk::Label,
+    bookmark_popover: gtk::Popover,
+    bm_prompt_entry: gtk::Entry,
+    bm_prompt_title: gtk::Label,
+    bm_current_pos_ms: Rc<Cell<u64>>,
     waveform: Rc<WaveformWidget>,
     time_current: gtk::Label,
     time_total: gtk::Label,
     volume_scale: gtk::Scale,
     vol_btn: gtk::Button,
-    share_btn: gtk::Button,
     btn_queue: gtk::Button,
     btn_mini: gtk::Button,
     q_title_lbl: gtk::Label,
@@ -47,6 +52,7 @@ pub struct PlayerBar {
     on_sleep_timer: Rc<RefCell<Option<Box<dyn Fn(Option<u32>, bool)>>>>,
     on_add_bookmark: Rc<RefCell<Option<Box<dyn Fn()>>>>,
     on_stash_toggle: Rc<RefCell<Option<Box<dyn Fn()>>>>,
+    on_save_bookmark: Rc<RefCell<Option<Box<dyn Fn(u64, String)>>>>,
 }
 
 impl PlayerBar {
@@ -94,7 +100,7 @@ impl PlayerBar {
             .valign(gtk::Align::Center)
             .build();
 
-        // 1. Left section: Track info
+        // 1. Left section: Track info (ONLY artwork, title & artist, and like button)
         let info_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(12)
@@ -140,25 +146,9 @@ impl PlayerBar {
             .valign(gtk::Align::Center)
             .build();
 
-        let btn_bookmark = gtk::Button::builder()
-            .icon_name("bookmark-new-symbolic")
-            .css_classes(["btn-transport"])
-            .tooltip_text("Add Bookmark at current position (B)")
-            .valign(gtk::Align::Center)
-            .build();
-
-        let btn_stash = gtk::Button::builder()
-            .icon_name("folder-download-symbolic")
-            .css_classes(["btn-transport"])
-            .tooltip_text("Stash track offline")
-            .valign(gtk::Align::Center)
-            .build();
-
         info_box.append(&artwork);
         info_box.append(&titles_vbox);
         info_box.append(&like_btn);
-        info_box.append(&btn_bookmark);
-        info_box.append(&btn_stash);
 
         // 2. Center section: Transport Buttons
         let center_box = gtk::Box::builder()
@@ -205,21 +195,399 @@ impl PlayerBar {
         center_box.append(&btn_next);
         center_box.append(&btn_repeat);
 
-        // 3. Right section: Volume & Share
+        // 3. Right section: [ ... (More) ] [ Queue ] [ Mute ] [ Volume Slider ] [ Minimize ]
         let right_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
-            .spacing(12)
+            .spacing(10)
             .hexpand(false)
             .halign(gtk::Align::End)
             .valign(gtk::Align::Center)
             .build();
 
-        let share_btn = gtk::Button::builder()
-            .icon_name("emblem-shared-symbolic")
+        // --- A. Three-dot ... More Button & Popover ---
+        let btn_more = gtk::Button::builder()
+            .icon_name("view-more-horizontal-symbolic")
             .css_classes(["btn-transport"])
-            .tooltip_text("Copy track link to clipboard")
+            .tooltip_text("More Options")
+            .valign(gtk::Align::Center)
             .build();
 
+        let more_popover = gtk::Popover::builder()
+            .autohide(true)
+            .has_arrow(true)
+            .position(gtk::PositionType::Top)
+            .build();
+        more_popover.set_parent(&btn_more);
+
+        let more_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(4)
+            .margin_top(8)
+            .margin_bottom(8)
+            .margin_start(8)
+            .margin_end(8)
+            .width_request(260)
+            .build();
+
+        let make_more_item = |icon: &str, label: &str| -> (gtk::Button, gtk::Image, gtk::Label) {
+            let row = gtk::Box::builder()
+                .orientation(gtk::Orientation::Horizontal)
+                .spacing(10)
+                .margin_start(6)
+                .margin_end(6)
+                .margin_top(4)
+                .margin_bottom(4)
+                .build();
+            let img = gtk::Image::builder()
+                .icon_name(icon)
+                .pixel_size(16)
+                .build();
+            let lbl = gtk::Label::builder()
+                .label(label)
+                .halign(gtk::Align::Start)
+                .hexpand(true)
+                .build();
+            row.append(&img);
+            row.append(&lbl);
+            let btn = gtk::Button::builder()
+                .child(&row)
+                .css_classes(["flat", "context-menu-item"])
+                .build();
+            (btn, img, lbl)
+        };
+
+        // Item 1: Bookmark
+        let (btn_more_bookmark, _, _) = make_more_item("bookmark-new-symbolic", "Add Bookmark at Position (B)");
+        more_box.append(&btn_more_bookmark);
+
+        // Item 2: Download / Stash
+        let (btn_more_stash, more_stash_icon, more_stash_label) = make_more_item("folder-download-symbolic", "Download Track Offline");
+        more_box.append(&btn_more_stash);
+
+        // Item 3: Share link
+        let (share_btn, _, _) = make_more_item("emblem-shared-symbolic", "Copy Track Link");
+        more_box.append(&share_btn);
+
+        // Separator
+        let sep1 = gtk::Separator::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .margin_top(4)
+            .margin_bottom(4)
+            .build();
+        more_box.append(&sep1);
+
+        // Section: Playback Speed (0.5x - 2.5x)
+        let speed_hdr = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .margin_start(6)
+            .margin_end(6)
+            .margin_top(2)
+            .margin_bottom(2)
+            .build();
+
+        let speed_title = gtk::Label::builder()
+            .label("PLAYBACK SPEED")
+            .css_classes(["time-label"])
+            .halign(gtk::Align::Start)
+            .hexpand(true)
+            .build();
+
+        let speed_val_lbl = gtk::Label::builder()
+            .label("1.00x")
+            .css_classes(["time-label"])
+            .halign(gtk::Align::End)
+            .build();
+
+        speed_hdr.append(&speed_title);
+        speed_hdr.append(&speed_val_lbl);
+        more_box.append(&speed_hdr);
+
+        let speed_presets_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(4)
+            .halign(gtk::Align::Center)
+            .margin_top(2)
+            .margin_bottom(4)
+            .build();
+
+        let speed_slider = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.5, 2.5, 0.05);
+        speed_slider.set_value(1.0);
+        speed_slider.set_hexpand(true);
+        speed_slider.add_css_class("volume-scale");
+        speed_slider.set_margin_start(6);
+        speed_slider.set_margin_end(6);
+
+        let presets: [f64; 5] = [0.75, 1.0, 1.25, 1.5, 2.0];
+        for sp in presets {
+            let chip = gtk::Button::builder()
+                .label(&format!("{:.2}x", sp).replace(".00", "").replace("0x", "x"))
+                .css_classes(["filter-chip"])
+                .build();
+            let s_slider = speed_slider.clone();
+            chip.connect_clicked(move |_| {
+                s_slider.set_value(sp);
+            });
+            speed_presets_box.append(&chip);
+        }
+        more_box.append(&speed_presets_box);
+        more_box.append(&speed_slider);
+
+        // Separator
+        let sep2 = gtk::Separator::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .margin_top(4)
+            .margin_bottom(4)
+            .build();
+        more_box.append(&sep2);
+
+        // Section: Sleep Timer
+        let sleep_hdr = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .margin_start(6)
+            .margin_end(6)
+            .margin_top(2)
+            .margin_bottom(2)
+            .build();
+
+        let sleep_title = gtk::Label::builder()
+            .label("SLEEP TIMER")
+            .css_classes(["time-label"])
+            .halign(gtk::Align::Start)
+            .hexpand(true)
+            .build();
+
+        let sleep_status_lbl = gtk::Label::builder()
+            .label("Off")
+            .css_classes(["player-artist"])
+            .halign(gtk::Align::End)
+            .build();
+
+        sleep_hdr.append(&sleep_title);
+        sleep_hdr.append(&sleep_status_lbl);
+        more_box.append(&sleep_hdr);
+
+        let on_sleep_timer: Rc<RefCell<Option<Box<dyn Fn(Option<u32>, bool)>>>> = Rc::new(RefCell::new(None));
+
+        let sleep_grid_row1 = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(4)
+            .halign(gtk::Align::Center)
+            .margin_top(2)
+            .build();
+
+        let sleep_grid_row2 = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(4)
+            .halign(gtk::Align::Center)
+            .margin_top(4)
+            .margin_bottom(4)
+            .build();
+
+        let sleep_opts: Vec<(&str, Option<u32>, bool)> = vec![
+            ("Off", None, false),
+            ("15m", Some(15 * 60), false),
+            ("30m", Some(30 * 60), false),
+            ("45m", Some(45 * 60), false),
+            ("60m", Some(60 * 60), false),
+            ("End of Track", None, true),
+        ];
+
+        for (i, (lbl, secs, end_track)) in sleep_opts.into_iter().enumerate() {
+            let chip = gtk::Button::builder()
+                .label(lbl)
+                .css_classes(["filter-chip"])
+                .build();
+            let sleep_cb_c = Rc::clone(&on_sleep_timer);
+            let pop_c = more_popover.clone();
+            chip.connect_clicked(move |_| {
+                if let Some(ref cb) = *sleep_cb_c.borrow() {
+                    cb(secs, end_track);
+                }
+                pop_c.popdown();
+            });
+            if i < 3 {
+                sleep_grid_row1.append(&chip);
+            } else {
+                sleep_grid_row2.append(&chip);
+            }
+        }
+        more_box.append(&sleep_grid_row1);
+        more_box.append(&sleep_grid_row2);
+
+        more_popover.set_child(Some(&more_box));
+
+        let more_pop_c = more_popover.clone();
+        btn_more.connect_clicked(move |_| {
+            more_pop_c.popup();
+        });
+
+        // --- B. Bookmark Naming Prompt Popover ---
+        let bookmark_popover = gtk::Popover::builder()
+            .autohide(true)
+            .has_arrow(true)
+            .position(gtk::PositionType::Top)
+            .build();
+        bookmark_popover.set_parent(waveform.widget());
+
+        let bm_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(8)
+            .margin_top(10)
+            .margin_bottom(10)
+            .margin_start(12)
+            .margin_end(12)
+            .width_request(280)
+            .build();
+
+        let bm_header = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(8)
+            .build();
+
+        let bm_icon = gtk::Image::builder()
+            .icon_name("bookmark-new-symbolic")
+            .pixel_size(16)
+            .build();
+
+        let bm_prompt_title = gtk::Label::builder()
+            .label("Add Bookmark")
+            .css_classes(["brand-label"])
+            .halign(gtk::Align::Start)
+            .hexpand(true)
+            .build();
+
+        bm_header.append(&bm_icon);
+        bm_header.append(&bm_prompt_title);
+        bm_box.append(&bm_header);
+
+        let bm_prompt_entry = gtk::Entry::builder()
+            .placeholder_text("Bookmark name (e.g. Intro, Drop, Solo)...")
+            .css_classes(["sc-search-entry"])
+            .build();
+        bm_box.append(&bm_prompt_entry);
+
+        let bm_btn_row = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(8)
+            .halign(gtk::Align::End)
+            .build();
+
+        let bm_cancel_btn = gtk::Button::builder()
+            .label("Cancel")
+            .css_classes(["filter-chip"])
+            .build();
+
+        let bm_save_btn = gtk::Button::builder()
+            .label("Save Bookmark")
+            .css_classes(["filter-chip", "active"])
+            .build();
+
+        bm_btn_row.append(&bm_cancel_btn);
+        bm_btn_row.append(&bm_save_btn);
+        bm_box.append(&bm_btn_row);
+
+        bookmark_popover.set_child(Some(&bm_box));
+
+        let bm_pop_cancel = bookmark_popover.clone();
+        bm_cancel_btn.connect_clicked(move |_| {
+            bm_pop_cancel.popdown();
+        });
+
+        let bm_current_pos_ms = Rc::new(Cell::new(0u64));
+        let on_save_bookmark: Rc<RefCell<Option<Box<dyn Fn(u64, String)>>>> = Rc::new(RefCell::new(None));
+
+        let do_save = {
+            let pop = bookmark_popover.clone();
+            let entry = bm_prompt_entry.clone();
+            let pos_c = Rc::clone(&bm_current_pos_ms);
+            let save_cb = Rc::clone(&on_save_bookmark);
+            move || {
+                let text = entry.text().trim().to_string();
+                let note = if text.is_empty() { "Bookmark".to_string() } else { text };
+                let pos = pos_c.get();
+                pop.popdown();
+                if let Some(ref cb) = *save_cb.borrow() {
+                    cb(pos, note);
+                }
+            }
+        };
+
+        let do_save_c1 = do_save.clone();
+        bm_save_btn.connect_clicked(move |_| do_save_c1());
+
+        let do_save_c2 = do_save.clone();
+        bm_prompt_entry.connect_activate(move |_| do_save_c2());
+
+        // --- C. Queue Flyout Button & Popover ---
+        let btn_queue = gtk::Button::builder()
+            .icon_name("view-list-bullet-symbolic")
+            .css_classes(["btn-transport"])
+            .tooltip_text("Up Next & Playback Queue")
+            .valign(gtk::Align::Center)
+            .build();
+
+        let queue_popover = gtk::Popover::builder()
+            .autohide(true)
+            .has_arrow(true)
+            .position(gtk::PositionType::Top)
+            .build();
+        queue_popover.set_parent(&btn_queue);
+
+        let queue_container = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(10)
+            .width_request(380)
+            .height_request(420)
+            .margin_top(8)
+            .margin_bottom(8)
+            .margin_start(10)
+            .margin_end(10)
+            .build();
+
+        let q_header = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(8)
+            .build();
+
+        let q_title_lbl = gtk::Label::builder()
+            .label("Up Next (0)")
+            .css_classes(["brand-label"])
+            .halign(gtk::Align::Start)
+            .hexpand(true)
+            .build();
+
+        let q_clear_btn = gtk::Button::builder()
+            .label("Clear Queue")
+            .css_classes(["filter-chip"])
+            .halign(gtk::Align::End)
+            .build();
+
+        q_header.append(&q_title_lbl);
+        q_header.append(&q_clear_btn);
+        queue_container.append(&q_header);
+
+        let q_scroller = gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .vscrollbar_policy(gtk::PolicyType::Automatic)
+            .hexpand(true)
+            .vexpand(true)
+            .build();
+
+        let q_items_flow = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(6)
+            .build();
+
+        q_scroller.set_child(Some(&q_items_flow));
+        queue_container.append(&q_scroller);
+        queue_popover.set_child(Some(&queue_container));
+
+        let q_pop_c = queue_popover.clone();
+        btn_queue.connect_clicked(move |_| {
+            q_pop_c.popup();
+        });
+
+        // --- D. Volume Mute Button & Volume Slider ---
         let vol_btn = gtk::Button::builder()
             .icon_name("audio-volume-high-symbolic")
             .css_classes(["btn-transport"])
@@ -295,229 +663,7 @@ impl PlayerBar {
             }
         });
 
-        // Queue Flyout Button & Popover
-        let btn_queue = gtk::Button::builder()
-            .icon_name("view-list-bullet-symbolic")
-            .css_classes(["btn-transport"])
-            .tooltip_text("Up Next & Playback Queue")
-            .valign(gtk::Align::Center)
-            .build();
-
-        let queue_popover = gtk::Popover::builder()
-            .autohide(true)
-            .has_arrow(true)
-            .position(gtk::PositionType::Top)
-            .build();
-        queue_popover.set_parent(&btn_queue);
-
-        let queue_container = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(10)
-            .width_request(380)
-            .height_request(420)
-            .margin_top(8)
-            .margin_bottom(8)
-            .margin_start(10)
-            .margin_end(10)
-            .build();
-
-        let q_header = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(8)
-            .build();
-
-        let q_title_lbl = gtk::Label::builder()
-            .label("Up Next (0)")
-            .css_classes(["brand-label"])
-            .halign(gtk::Align::Start)
-            .hexpand(true)
-            .build();
-
-        let q_clear_btn = gtk::Button::builder()
-            .label("Clear Queue")
-            .css_classes(["filter-chip"])
-            .halign(gtk::Align::End)
-            .build();
-
-        q_header.append(&q_title_lbl);
-        q_header.append(&q_clear_btn);
-        queue_container.append(&q_header);
-
-        let q_scroller = gtk::ScrolledWindow::builder()
-            .hscrollbar_policy(gtk::PolicyType::Never)
-            .vscrollbar_policy(gtk::PolicyType::Automatic)
-            .hexpand(true)
-            .vexpand(true)
-            .build();
-
-        let q_items_flow = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(6)
-            .build();
-
-        q_scroller.set_child(Some(&q_items_flow));
-        queue_container.append(&q_scroller);
-        queue_popover.set_child(Some(&queue_container));
-
-        let q_pop_c = queue_popover.clone();
-        btn_queue.connect_clicked(move |_| {
-            q_pop_c.popup();
-        });
-
-        // Playback Speed Button & Popover (0.5x - 2.5x)
-        let btn_speed = gtk::Button::builder()
-            .label("1.0x")
-            .css_classes(["btn-transport", "filter-chip"])
-            .tooltip_text("Playback Speed (0.5x - 2.5x)")
-            .valign(gtk::Align::Center)
-            .build();
-
-        let speed_popover = gtk::Popover::builder()
-            .autohide(true)
-            .has_arrow(true)
-            .position(gtk::PositionType::Top)
-            .build();
-        speed_popover.set_parent(&btn_speed);
-
-        let speed_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(8)
-            .margin_top(10)
-            .margin_bottom(10)
-            .margin_start(12)
-            .margin_end(12)
-            .width_request(220)
-            .build();
-
-        let speed_title = gtk::Label::builder()
-            .label("Playback Speed")
-            .css_classes(["brand-label"])
-            .halign(gtk::Align::Start)
-            .build();
-        speed_box.append(&speed_title);
-
-        let presets_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(4)
-            .halign(gtk::Align::Center)
-            .build();
-
-        let speed_slider = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.5, 2.5, 0.05);
-        speed_slider.set_value(1.0);
-        speed_slider.set_hexpand(true);
-        speed_slider.add_css_class("volume-scale");
-
-        let speed_val_lbl = gtk::Label::builder()
-            .label("1.00x")
-            .css_classes(["time-label"])
-            .halign(gtk::Align::End)
-            .width_chars(5)
-            .build();
-
-        let presets: [f64; 5] = [0.75, 1.0, 1.25, 1.5, 2.0];
-        for sp in presets {
-            let chip = gtk::Button::builder()
-                .label(&format!("{:.2}x", sp).replace(".00", "").replace("0x", "x"))
-                .css_classes(["filter-chip"])
-                .build();
-            let s_slider = speed_slider.clone();
-            chip.connect_clicked(move |_| {
-                s_slider.set_value(sp);
-            });
-            presets_box.append(&chip);
-        }
-        speed_box.append(&presets_box);
-
-        let slider_row = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(8)
-            .build();
-        slider_row.append(&speed_slider);
-        slider_row.append(&speed_val_lbl);
-        speed_box.append(&slider_row);
-        speed_popover.set_child(Some(&speed_box));
-
-        let sp_pop_c = speed_popover.clone();
-        btn_speed.connect_clicked(move |_| {
-            sp_pop_c.popup();
-        });
-
-        // Sleep Timer Button & Popover
-        let btn_sleep = gtk::Button::builder()
-            .icon_name("alarm-symbolic")
-            .css_classes(["btn-transport"])
-            .tooltip_text("Sleep Timer")
-            .valign(gtk::Align::Center)
-            .build();
-
-        let sleep_popover = gtk::Popover::builder()
-            .autohide(true)
-            .has_arrow(true)
-            .position(gtk::PositionType::Top)
-            .build();
-        sleep_popover.set_parent(&btn_sleep);
-
-        let sleep_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(8)
-            .margin_top(10)
-            .margin_bottom(10)
-            .margin_start(12)
-            .margin_end(12)
-            .width_request(240)
-            .build();
-
-        let sleep_title = gtk::Label::builder()
-            .label("Sleep Timer")
-            .css_classes(["brand-label"])
-            .halign(gtk::Align::Start)
-            .build();
-
-        let sleep_status_lbl = gtk::Label::builder()
-            .label("Off")
-            .css_classes(["player-artist"])
-            .halign(gtk::Align::Start)
-            .build();
-
-        sleep_box.append(&sleep_title);
-        sleep_box.append(&sleep_status_lbl);
-
-        let on_sleep_timer: Rc<RefCell<Option<Box<dyn Fn(Option<u32>, bool)>>>> = Rc::new(RefCell::new(None));
-
-        let sleep_opts: Vec<(&str, Option<u32>, bool)> = vec![
-            ("Turn Off", None, false),
-            ("15 Minutes", Some(15 * 60), false),
-            ("30 Minutes", Some(30 * 60), false),
-            ("45 Minutes", Some(45 * 60), false),
-            ("60 Minutes", Some(60 * 60), false),
-            ("End of Track", None, true),
-        ];
-
-        for (lbl, secs, end_track) in sleep_opts {
-            let opt_btn = gtk::Button::builder()
-                .label(lbl)
-                .css_classes(["filter-chip"])
-                .halign(gtk::Align::Fill)
-                .build();
-            let sleep_cb_c = Rc::clone(&on_sleep_timer);
-            let pop_c = sleep_popover.clone();
-            opt_btn.connect_clicked(move |_| {
-                if let Some(ref cb) = *sleep_cb_c.borrow() {
-                    cb(secs, end_track);
-                }
-                pop_c.popdown();
-            });
-            sleep_box.append(&opt_btn);
-        }
-
-        sleep_popover.set_child(Some(&sleep_box));
-
-        let sl_pop_c = sleep_popover.clone();
-        btn_sleep.connect_clicked(move |_| {
-            sl_pop_c.popup();
-        });
-
-        // Mini-player toggle button
+        // --- E. Mini-Player Mode Button (at the very right, right of volume slider) ---
         let btn_mini = gtk::Button::builder()
             .icon_name("view-restore-symbolic")
             .css_classes(["btn-transport"])
@@ -525,13 +671,12 @@ impl PlayerBar {
             .valign(gtk::Align::Center)
             .build();
 
-        right_box.append(&btn_speed);
-        right_box.append(&btn_sleep);
+        // Right side strictly: [... (more)] [queue] [mute] [volume slider] [minimize]
+        right_box.append(&btn_more);
         right_box.append(&btn_queue);
-        right_box.append(&share_btn);
-        right_box.append(&btn_mini);
         right_box.append(&vol_btn);
         right_box.append(&volume_scale);
+        right_box.append(&btn_mini);
 
         // Assemble row
         controls_row.append(&info_box);
@@ -545,9 +690,11 @@ impl PlayerBar {
         let is_playing = Rc::new(RefCell::new(false));
         let is_liked = Rc::new(RefCell::new(false));
 
-        // Connect share button to Wayland clipboard
+        // Connect share button in more menu to clipboard
         let track_share_clone = Rc::clone(&current_track);
+        let more_pop_share = more_popover.clone();
         share_btn.connect_clicked(move |_btn| {
+            more_pop_share.popdown();
             if let Some(ref track) = *track_share_clone.borrow() {
                 if let Some(ref url) = track.permalink_url.as_deref() {
                     if let Some(display) = gdk4::Display::default() {
@@ -582,18 +729,11 @@ impl PlayerBar {
             }
         });
 
-        let btn_speed_clone = btn_speed.clone();
         let speed_val_clone = speed_val_lbl.clone();
         let speed_cb_c = Rc::clone(&on_speed_change);
         speed_slider.connect_value_changed(move |scale| {
             let val = scale.value();
             let val = if (val - 1.0).abs() < 0.03 { 1.0 } else { val };
-            let lbl = if (val - 1.0).abs() < 0.01 {
-                "1.0x".to_string()
-            } else {
-                format!("{:.2}x", val)
-            };
-            btn_speed_clone.set_label(&lbl);
             speed_val_clone.set_label(&format!("{:.2}x", val));
             if let Some(ref cb) = *speed_cb_c.borrow() {
                 cb(val);
@@ -601,14 +741,18 @@ impl PlayerBar {
         });
 
         let bm_cb_c = Rc::clone(&on_add_bookmark);
-        btn_bookmark.connect_clicked(move |_| {
+        let more_pop_bm = more_popover.clone();
+        btn_more_bookmark.connect_clicked(move |_| {
+            more_pop_bm.popdown();
             if let Some(ref cb) = *bm_cb_c.borrow() {
                 cb();
             }
         });
 
         let stash_cb_c = Rc::clone(&on_stash_toggle);
-        btn_stash.connect_clicked(move |_| {
+        let more_pop_st = more_popover.clone();
+        btn_more_stash.connect_clicked(move |_| {
+            more_pop_st.popdown();
             if let Some(ref cb) = *stash_cb_c.borrow() {
                 cb();
             }
@@ -620,22 +764,27 @@ impl PlayerBar {
             title_label,
             artist_label,
             like_btn,
-            btn_bookmark,
-            btn_stash,
             btn_play_pause,
             btn_prev,
             btn_next,
             btn_shuffle,
             btn_repeat,
-            btn_speed,
-            btn_sleep,
+            btn_more,
+            more_stash_icon,
+            more_stash_label,
+            btn_more_stash,
+            speed_slider,
+            speed_val_lbl,
             sleep_status_lbl,
+            bookmark_popover,
+            bm_prompt_entry,
+            bm_prompt_title,
+            bm_current_pos_ms,
             waveform,
             time_current,
             time_total,
             volume_scale,
             vol_btn,
-            share_btn,
             btn_queue,
             btn_mini,
             q_title_lbl,
@@ -654,6 +803,7 @@ impl PlayerBar {
             on_sleep_timer,
             on_add_bookmark,
             on_stash_toggle,
+            on_save_bookmark,
         }
     }
 
@@ -715,6 +865,28 @@ impl PlayerBar {
             self.like_btn.set_icon_name("non-starred-symbolic");
             self.like_btn.set_tooltip_text(Some("Like track"));
         }
+    }
+
+    pub fn prompt_add_bookmark(&self, position_ms: u64, duration_ms: u64) {
+        self.bm_current_pos_ms.set(position_ms);
+        self.bm_prompt_title.set_label(&format!("Add Bookmark at {}", format_milliseconds(position_ms)));
+        self.bm_prompt_entry.set_text("");
+
+        let pct = if duration_ms > 0 {
+            (position_ms as f64 / duration_ms as f64).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let w = self.waveform.widget().width() as f64;
+        let target_x = if w > 20.0 { (pct * w).clamp(10.0, w - 10.0) } else { 50.0 };
+        let rect = gdk4::Rectangle::new(target_x as i32, 0, 1, 1);
+        self.bookmark_popover.set_pointing_to(Some(&rect));
+        self.bookmark_popover.popup();
+        self.bm_prompt_entry.grab_focus();
+    }
+
+    pub fn connect_save_bookmark<F: Fn(u64, String) + 'static>(&self, f: F) {
+        *self.on_save_bookmark.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_play_pause<F: Fn() + 'static>(&self, f: F) {
@@ -966,41 +1138,35 @@ impl PlayerBar {
     pub fn set_stashed(&self, stashed: bool) {
         *self.is_stashed.borrow_mut() = stashed;
         if stashed {
-            self.btn_stash.set_icon_name("emblem-ok-symbolic");
-            self.btn_stash.add_css_class("btn-heart-liked");
-            self.btn_stash.set_tooltip_text(Some("Stashed Offline (Click to remove)"));
+            self.more_stash_icon.set_icon_name(Some("emblem-ok-symbolic"));
+            self.more_stash_label.set_label("Remove from Offline Stash");
+            self.btn_more_stash.add_css_class("btn-heart-liked");
         } else {
-            self.btn_stash.set_icon_name("folder-download-symbolic");
-            self.btn_stash.remove_css_class("btn-heart-liked");
-            self.btn_stash.set_tooltip_text(Some("Stash Track Offline"));
+            self.more_stash_icon.set_icon_name(Some("folder-download-symbolic"));
+            self.more_stash_label.set_label("Download Track Offline");
+            self.btn_more_stash.remove_css_class("btn-heart-liked");
         }
     }
 
     pub fn set_speed(&self, speed: f64) {
         let label = if (speed - 1.0).abs() < 0.01 {
-            "1.0x".to_string()
+            "1.00x".to_string()
         } else {
             format!("{:.2}x", speed)
         };
-        self.btn_speed.set_label(&label);
+        self.speed_val_lbl.set_label(&label);
+        self.speed_slider.set_value(speed);
     }
 
     pub fn update_sleep_timer_status(&self, remaining_sec_opt: Option<u64>, is_end_of_track: bool) {
         if is_end_of_track {
-            self.btn_sleep.add_css_class("active");
-            self.sleep_status_lbl.set_label("Pausing at end of current track");
-            self.btn_sleep.set_tooltip_text(Some("Sleep Timer: End of Track"));
+            self.sleep_status_lbl.set_label("End of track");
         } else if let Some(rem) = remaining_sec_opt {
-            self.btn_sleep.add_css_class("active");
             let m = rem / 60;
             let s = rem % 60;
-            let text = format!("Fade-out & pause in {:02}:{:02}", m, s);
-            self.sleep_status_lbl.set_label(&text);
-            self.btn_sleep.set_tooltip_text(Some(&format!("Sleep Timer: {:02}:{:02}", m, s)));
+            self.sleep_status_lbl.set_label(&format!("{:02}:{:02}", m, s));
         } else {
-            self.btn_sleep.remove_css_class("active");
             self.sleep_status_lbl.set_label("Off");
-            self.btn_sleep.set_tooltip_text(Some("Sleep Timer"));
         }
     }
 

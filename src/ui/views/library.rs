@@ -33,6 +33,8 @@ pub struct LibraryView {
     on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_artist_click: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
     on_remove_stash: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
+    on_stash_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    is_stashed_fn: Rc<RefCell<Option<Box<dyn Fn(u64) -> bool>>>>,
     current_tracks: Rc<RefCell<Vec<Track>>>,
 }
 
@@ -140,6 +142,8 @@ impl LibraryView {
         let on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
         let on_artist_click: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
         let on_remove_stash: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
+        let on_stash_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
+        let is_stashed_fn: Rc<RefCell<Option<Box<dyn Fn(u64) -> bool>>>> = Rc::new(RefCell::new(None));
         let current_tracks = Rc::new(RefCell::new(Vec::new()));
 
         // Connect tab switching
@@ -241,6 +245,8 @@ impl LibraryView {
             on_select_track,
             on_artist_click,
             on_remove_stash,
+            on_stash_track,
+            is_stashed_fn,
             current_tracks,
         }
     }
@@ -437,6 +443,8 @@ impl LibraryView {
         let like_cb_ctx = Rc::clone(&self.on_like_track);
         let detail_cb_ctx = Rc::clone(&self.on_select_track);
         let artist_cb_ctx = Rc::clone(&self.on_artist_click);
+        let stash_cb_ctx = Rc::clone(&self.on_stash_track);
+        let is_st_ctx = Rc::clone(&self.is_stashed_fn);
 
         let actions = crate::ui::context_menu::TrackActions {
             on_play: Some(Rc::new(move |t| {
@@ -465,6 +473,18 @@ impl LibraryView {
             on_toggle_like: Some(Rc::new(move |t, s| {
                 if let Some(ref cb) = *like_cb_ctx.borrow() {
                     cb(t, s);
+                }
+            })),
+            on_stash_toggle: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *stash_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            is_stashed: Some(Rc::new(move |id| {
+                if let Some(ref cb) = *is_st_ctx.borrow() {
+                    cb(id)
+                } else {
+                    false
                 }
             })),
         };
@@ -503,6 +523,14 @@ impl LibraryView {
 
     pub fn connect_remove_stash<F: Fn(u64) + 'static>(&self, f: F) {
         *self.on_remove_stash.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_stash_track<F: Fn(Track) + 'static>(&self, f: F) {
+        *self.on_stash_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn set_stash_checker<F: Fn(u64) -> bool + 'static>(&self, f: F) {
+        *self.is_stashed_fn.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn set_stashed_tracks(&self, items: Vec<(Track, String, u64)>) {
@@ -688,6 +716,8 @@ impl LibraryView {
         let like_cb_ctx = Rc::clone(&self.on_like_track);
         let detail_cb_ctx = Rc::clone(&self.on_select_track);
         let artist_cb_ctx = Rc::clone(&self.on_artist_click);
+        let stash_cb_ctx = Rc::clone(&self.on_stash_track);
+        let is_st_ctx = Rc::clone(&self.is_stashed_fn);
 
         let actions = crate::ui::context_menu::TrackActions {
             on_play: Some(Rc::new(move |t| {
@@ -716,6 +746,18 @@ impl LibraryView {
             on_toggle_like: Some(Rc::new(move |t, s| {
                 if let Some(ref cb) = *like_cb_ctx.borrow() {
                     cb(t, s);
+                }
+            })),
+            on_stash_toggle: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *stash_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            is_stashed: Some(Rc::new(move |id| {
+                if let Some(ref cb) = *is_st_ctx.borrow() {
+                    cb(id)
+                } else {
+                    false
                 }
             })),
         };

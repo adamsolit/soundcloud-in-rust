@@ -29,6 +29,8 @@ pub struct PlaylistView {
     on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_artist_click: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
+    on_stash_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    is_stashed_fn: Rc<RefCell<Option<Box<dyn Fn(u64) -> bool>>>>,
 }
 
 impl PlaylistView {
@@ -177,6 +179,8 @@ impl PlaylistView {
         let on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
         let on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
         let on_artist_click: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
+        let on_stash_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
+        let is_stashed_fn: Rc<RefCell<Option<Box<dyn Fn(u64) -> bool>>>> = Rc::new(RefCell::new(None));
 
         let play_actions_row = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -313,6 +317,8 @@ impl PlaylistView {
             on_queue_track,
             on_select_track,
             on_artist_click,
+            on_stash_track,
+            is_stashed_fn,
         }
     }
 
@@ -622,6 +628,8 @@ impl PlaylistView {
         let like_cb_ctx = Rc::clone(&self.on_like_track);
         let detail_cb_ctx = Rc::clone(&self.on_select_track);
         let artist_cb_ctx = Rc::clone(&self.on_artist_click);
+        let stash_cb_ctx = Rc::clone(&self.on_stash_track);
+        let is_st_ctx = Rc::clone(&self.is_stashed_fn);
 
         let actions = crate::ui::context_menu::TrackActions {
             on_play: Some(Rc::new(move |t| {
@@ -647,6 +655,18 @@ impl PlaylistView {
             on_toggle_like: Some(Rc::new(move |t, s| {
                 if let Some(ref cb) = *like_cb_ctx.borrow() {
                     cb(t, s);
+                }
+            })),
+            on_stash_toggle: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *stash_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            is_stashed: Some(Rc::new(move |id| {
+                if let Some(ref cb) = *is_st_ctx.borrow() {
+                    cb(id)
+                } else {
+                    false
                 }
             })),
         };
@@ -705,6 +725,14 @@ impl PlaylistView {
 
     pub fn connect_artist_click<F: Fn(u64) + 'static>(&self, f: F) {
         *self.on_artist_click.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_stash_track<F: Fn(Track) + 'static>(&self, f: F) {
+        *self.on_stash_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn set_stash_checker<F: Fn(u64) -> bool + 'static>(&self, f: F) {
+        *self.is_stashed_fn.borrow_mut() = Some(Box::new(f));
     }
 }
 

@@ -19,6 +19,8 @@ pub struct StreamView {
     on_genre_change: Rc<RefCell<Option<Box<dyn Fn(String)>>>>,
     on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_artist_click: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
+    on_stash_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    is_stashed_fn: Rc<RefCell<Option<Box<dyn Fn(u64) -> bool>>>>,
     current_genre: Rc<RefCell<String>>,
     current_tracks: Rc<RefCell<Vec<Track>>>,
 }
@@ -100,6 +102,8 @@ impl StreamView {
         let on_genre_change = Rc::new(RefCell::new(None));
         let on_queue_track = Rc::new(RefCell::new(None));
         let on_artist_click = Rc::new(RefCell::new(None));
+        let on_stash_track = Rc::new(RefCell::new(None));
+        let is_stashed_fn = Rc::new(RefCell::new(None));
         let current_genre = Rc::new(RefCell::new("my_stream".to_string()));
         let current_tracks = Rc::new(RefCell::new(Vec::new()));
 
@@ -115,6 +119,8 @@ impl StreamView {
             on_genre_change,
             on_queue_track,
             on_artist_click,
+            on_stash_track,
+            is_stashed_fn,
             current_genre,
             current_tracks,
         };
@@ -409,6 +415,8 @@ impl StreamView {
         let detail_cb_ctx = Rc::clone(&self.on_select_track);
         let artist_cb_ctx = Rc::clone(&self.on_artist_click);
         let like_cb_ctx = Rc::clone(&self.on_like_track);
+        let stash_cb_ctx = Rc::clone(&self.on_stash_track);
+        let is_st_ctx = Rc::clone(&self.is_stashed_fn);
 
         let actions = crate::ui::context_menu::TrackActions {
             on_play: Some(Rc::new(move |t| {
@@ -439,10 +447,30 @@ impl StreamView {
                     cb(t, s);
                 }
             })),
+            on_stash_toggle: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *stash_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            is_stashed: Some(Rc::new(move |id| {
+                if let Some(ref cb) = *is_st_ctx.borrow() {
+                    cb(id)
+                } else {
+                    false
+                }
+            })),
         };
         crate::ui::context_menu::attach_track_context_menu(&card, track, actions);
 
         card
+    }
+
+    pub fn connect_stash_track<F: Fn(Track) + 'static>(&self, f: F) {
+        *self.on_stash_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn set_stash_checker<F: Fn(u64) -> bool + 'static>(&self, f: F) {
+        *self.is_stashed_fn.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_play_track<F: Fn(Track) + 'static>(&self, f: F) {

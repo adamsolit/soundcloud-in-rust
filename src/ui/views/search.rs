@@ -24,6 +24,8 @@ pub struct SearchView {
     on_select_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_select_user: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
     on_queue_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    on_stash_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
+    is_stashed_fn: Rc<RefCell<Option<Box<dyn Fn(u64) -> bool>>>>,
     current_tracks: Rc<RefCell<Vec<Track>>>,
 }
 
@@ -178,6 +180,8 @@ impl SearchView {
         let on_select_track = Rc::new(RefCell::new(None));
         let on_select_user = Rc::new(RefCell::new(None));
         let on_queue_track = Rc::new(RefCell::new(None));
+        let on_stash_track = Rc::new(RefCell::new(None));
+        let is_stashed_fn = Rc::new(RefCell::new(None));
         let current_tracks = Rc::new(RefCell::new(Vec::new()));
 
         Self {
@@ -196,6 +200,8 @@ impl SearchView {
             on_select_track,
             on_select_user,
             on_queue_track,
+            on_stash_track,
+            is_stashed_fn,
             current_tracks,
         }
     }
@@ -410,6 +416,8 @@ impl SearchView {
         let detail_cb_ctx = Rc::clone(&self.on_select_track);
         let artist_cb_ctx = Rc::clone(&self.on_select_user);
         let like_cb_ctx = Rc::clone(&self.on_like_track);
+        let stash_cb_ctx = Rc::clone(&self.on_stash_track);
+        let is_st_ctx = Rc::clone(&self.is_stashed_fn);
 
         let actions = crate::ui::context_menu::TrackActions {
             on_play: Some(Rc::new(move |t| {
@@ -438,6 +446,18 @@ impl SearchView {
             on_toggle_like: Some(Rc::new(move |t, s| {
                 if let Some(ref cb) = *like_cb_ctx.borrow() {
                     cb(t, s);
+                }
+            })),
+            on_stash_toggle: Some(Rc::new(move |t| {
+                if let Some(ref cb) = *stash_cb_ctx.borrow() {
+                    cb(t);
+                }
+            })),
+            is_stashed: Some(Rc::new(move |id| {
+                if let Some(ref cb) = *is_st_ctx.borrow() {
+                    cb(id)
+                } else {
+                    false
                 }
             })),
         };
@@ -584,6 +604,14 @@ impl SearchView {
 
     pub fn connect_select_user<F: Fn(u64) + 'static>(&self, f: F) {
         *self.on_select_user.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_stash_track<F: Fn(Track) + 'static>(&self, f: F) {
+        *self.on_stash_track.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn set_stash_checker<F: Fn(u64) -> bool + 'static>(&self, f: F) {
+        *self.is_stashed_fn.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_queue_track<F: Fn(Track) + 'static>(&self, f: F) {
