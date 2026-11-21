@@ -83,8 +83,26 @@ impl Database {
                 value TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS bookmarks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                track_id INTEGER NOT NULL,
+                timestamp_ms INTEGER NOT NULL,
+                note TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS stashed_tracks (
+                track_id INTEGER PRIMARY KEY,
+                file_path TEXT NOT NULL,
+                file_size INTEGER NOT NULL,
+                json_payload TEXT NOT NULL,
+                stashed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE INDEX IF NOT EXISTS idx_history_played_at ON playback_history(played_at DESC);
             CREATE INDEX IF NOT EXISTS idx_cached_tracks_liked ON cached_tracks(is_liked);
+            CREATE INDEX IF NOT EXISTS idx_bookmarks_track ON bookmarks(track_id);
+            CREATE INDEX IF NOT EXISTS idx_stashed_tracks_at ON stashed_tracks(stashed_at DESC);
             "#,
         )?;
         Ok(())
@@ -343,6 +361,136 @@ impl Database {
 
         Ok(top)
     }
+
+    // -------------------------------------------------------------------------
+    // Personal Timestamped Bookmarks
+    // -------------------------------------------------------------------------
+
+    pub fn add_bookmark(&self, track_id: u64, timestamp_ms: u64, note: &str) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO bookmarks (track_id, timestamp_ms, note, created_at) VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)",
+            params![track_id as i64, timestamp_ms as i64, note],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn get_bookmarks(&self, track_id: u64) -> Result<Vec<Bookmark>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, track_id, timestamp_ms, note, created_at FROM bookmarks WHERE track_id = ?1 ORDER BY timestamp_ms ASC",
+        )?;
+        let rows = stmt.query_map([track_id as i64], |row| {
+            Ok(Bookmark {
+                id: row.get(0)?,
+                track_id: row.get::<_, i64>(1)? as u64,
+                timestamp_ms: row.get::<_, i64>(2)? as u64,
+                note: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            list.push(r?);
+        }
+        Ok(list)
+    }
+
+    pub fn delete_bookmark(&self, bookmark_id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM bookmarks WHERE id = ?1", params![bookmark_id])?;
+        Ok(())
+    }
+
+    // -------------------------------------------------------------------------
+    // Offline Stash (Local Caching)
+    // -------------------------------------------------------------------------
+
+    pub fn save_stashed_track(&self, track: &Track, file_path: &str, file_size: u64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let payload = serde_json::to_string(track)?;
+        conn.execute(
+            r#"
+            INSERT INTO stashed_tracks (track_id, file_path, file_size, json_payload, stashed_at)
+            VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP)
+            ON CONFLICT(track_id) DO UPDATE SET
+                file_path = excluded.file_path,
+                file_size = excluded.file_size,
+                json_payload = excluded.json_payload,
+                stashed_at = CURRENT_TIMESTAMP
+            "#,
+            params![track.id as i64, file_path, file_size as i64, payload],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_stashed_tracks(&self) -> Result<Vec<(Track, String, u64)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT json_payload, file_path, file_size FROM stashed_tracks ORDER BY stashed_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let json_str: String = row.get(0)?;
+            let file_path: String = row.get(1)?;
+            let file_size: i64 = row.get(2)?;
+            Ok((json_str, file_path, file_size as u64))
+        })?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            let (json_str, file_path, file_size) = r?;
+            if let Ok(track) = serde_json::from_str::<Track>(&json_str) {
+                list.push((track, file_path, file_size));
+            }
+        }
+        Ok(list)
+    }
+
+    pub fn is_track_stashed(&self, track_id: u64) -> bool {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT file_path FROM stashed_tracks WHERE track_id = ?1",
+            params![track_id as i64],
+            |row| row.get::<_, String>(0),
+        )
+        .map(|path| std::path::Path::new(&path).exists())
+        .unwrap_or(false)
+    }
+
+    pub fn get_stashed_file_path(&self, track_id: u64) -> Option<String> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT file_path FROM stashed_tracks WHERE track_id = ?1",
+            params![track_id as i64],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .filter(|p| std::path::Path::new(p).exists())
+    }
+
+    pub fn remove_stashed_track(&self, track_id: u64) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let file_path: Option<String> = conn
+            .query_row(
+                "SELECT file_path FROM stashed_tracks WHERE track_id = ?1",
+                params![track_id as i64],
+                |row| row.get(0),
+            )
+            .ok();
+
+        conn.execute("DELETE FROM stashed_tracks WHERE track_id = ?1", params![track_id as i64])?;
+        Ok(file_path)
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Bookmark {
+    pub id: i64,
+    pub track_id: u64,
+    pub timestamp_ms: u64,
+    pub note: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

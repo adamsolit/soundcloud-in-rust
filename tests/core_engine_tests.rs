@@ -1,6 +1,6 @@
 use cloudpulse::api::waveform::generate_synthetic_waveform;
 use cloudpulse::audio::types::RepeatMode;
-use cloudpulse::audio::PlaybackQueue;
+use cloudpulse::audio::{AudioEngine, PlaybackQueue};
 use cloudpulse::db::Database;
 use cloudpulse::keyring::AuthStore;
 use cloudpulse::models::track::{format_milliseconds, Track};
@@ -336,6 +336,70 @@ fn test_conversation_other_user_resolution() {
 
     assert_eq!(conv.display_title(1001), "friend_user");
     assert_eq!(conv.display_avatar(1001), Some("https://example.com/friend.jpg".to_string()));
+}
+
+#[test]
+fn test_bookmarks_crud() {
+    let db = Database::new().expect("Failed to initialize database");
+    let track_id = 99901;
+
+    let bm_id = db.add_bookmark(track_id, 45000, "Drop at 0:45").expect("Failed to add bookmark");
+    assert!(bm_id > 0);
+
+    let bms = db.get_bookmarks(track_id).expect("Failed to get bookmarks");
+    assert_eq!(bms.len(), 1);
+    assert_eq!(bms[0].track_id, track_id);
+    assert_eq!(bms[0].timestamp_ms, 45000);
+    assert_eq!(bms[0].note, "Drop at 0:45");
+
+    db.delete_bookmark(bm_id).expect("Failed to delete bookmark");
+    let bms_after = db.get_bookmarks(track_id).expect("Failed to get bookmarks after delete");
+    assert!(bms_after.is_empty());
+}
+
+#[test]
+fn test_stashed_tracks_crud() {
+    let db = Database::new().expect("Failed to initialize database");
+    let track = create_dummy_track(88801, "Stashed Local Audio");
+
+    let tmp_file = std::env::temp_dir().join("cloudpulse_test_88801.m4a");
+    let _ = std::fs::write(&tmp_file, b"test stashed stream bytes");
+    let tmp_str = tmp_file.to_str().unwrap();
+
+    assert!(!db.is_track_stashed(track.id));
+
+    db.save_stashed_track(&track, tmp_str, 4_500_000)
+        .expect("Failed to save stashed track");
+
+    assert!(db.is_track_stashed(track.id));
+    assert_eq!(
+        db.get_stashed_file_path(track.id),
+        Some(tmp_str.to_string())
+    );
+
+    let stashed = db.get_stashed_tracks().expect("Failed to get stashed tracks");
+    assert!(stashed.iter().any(|(t, p, sz)| t.id == track.id && p == tmp_str && *sz == 4_500_000));
+
+    db.remove_stashed_track(track.id).expect("Failed to remove stashed track");
+    assert!(!db.is_track_stashed(track.id));
+    assert_eq!(db.get_stashed_file_path(track.id), None);
+
+    let _ = std::fs::remove_file(&tmp_file);
+}
+
+#[test]
+fn test_speed_control() {
+    let engine = AudioEngine::new().expect("Failed to initialize audio engine");
+    assert!((engine.get_speed() - 1.0).abs() < 0.01);
+
+    engine.set_speed(1.25);
+    assert!((engine.get_speed() - 1.25).abs() < 0.01);
+
+    engine.set_speed(0.75);
+    assert!((engine.get_speed() - 0.75).abs() < 0.01);
+
+    engine.set_speed(1.0);
+    assert!((engine.get_speed() - 1.0).abs() < 0.01);
 }
 
 fn create_dummy_track(id: u64, title: &str) -> Track {

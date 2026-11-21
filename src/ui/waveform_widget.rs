@@ -11,6 +11,7 @@ pub struct WaveformWidget {
     hover_pos: Rc<RefCell<Option<f64>>>,
     duration_ms: Rc<RefCell<u64>>,
     comments: Rc<RefCell<Vec<(f64, String)>>>,
+    bookmarks: Rc<RefCell<Vec<(f64, String, i64)>>>,
     seek_callback: Rc<RefCell<Option<Box<dyn Fn(f64)>>>>,
 }
 
@@ -35,6 +36,7 @@ impl WaveformWidget {
         let hover_pos = Rc::new(RefCell::new(None));
         let duration_ms = Rc::new(RefCell::new(0u64));
         let comments = Rc::new(RefCell::new(Vec::new()));
+        let bookmarks: Rc<RefCell<Vec<(f64, String, i64)>>> = Rc::new(RefCell::new(Vec::new()));
         let seek_callback: Rc<RefCell<Option<Box<dyn Fn(f64)>>>> = Rc::new(RefCell::new(None));
 
         // Setup draw function
@@ -43,6 +45,7 @@ impl WaveformWidget {
         let hover_clone = Rc::clone(&hover_pos);
         let duration_clone = Rc::clone(&duration_ms);
         let comments_clone = Rc::clone(&comments);
+        let bookmarks_clone = Rc::clone(&bookmarks);
 
         drawing_area.set_draw_func(move |_area, cr, width_i, height_i| {
             let w = width_i as f64;
@@ -167,6 +170,27 @@ impl WaveformWidget {
                 let _ = cr.fill();
             }
 
+            let bookmarks = bookmarks_clone.borrow();
+            // Draw personal bookmark markers (cyan diamond + subtle vertical hairline)
+            for (bm_pct, _note, _id) in bookmarks.iter() {
+                let bm_x = bm_pct * w;
+                // Diamond top flag
+                cr.set_source_rgb(0.35, 0.70, 1.0);
+                cr.move_to(bm_x, 1.0);
+                cr.line_to(bm_x + 3.0, 4.5);
+                cr.line_to(bm_x, 8.0);
+                cr.line_to(bm_x - 3.0, 4.5);
+                cr.close_path();
+                let _ = cr.fill();
+
+                // Subtle hairline down the waveform
+                cr.set_source_rgba(0.35, 0.70, 1.0, 0.45);
+                cr.set_line_width(0.75);
+                cr.move_to(bm_x, 8.0);
+                cr.line_to(bm_x, h - 2.0);
+                let _ = cr.stroke();
+            }
+
             // Draw hover scrub indicator line and time indicator pill
             if let Some(hov) = current_hover {
                 let hov_x = hov * w;
@@ -181,7 +205,21 @@ impl WaveformWidget {
                     let hover_sec = (hov * dur as f64 / 1000.0) as u64;
                     let mins = hover_sec / 60;
                     let secs = hover_sec % 60;
-                    let time_str = format!("{}:{:02}", mins, secs);
+                    let mut time_str = format!("{}:{:02}", mins, secs);
+
+                    for item in bookmarks.iter() {
+                        let bm_pct: f64 = item.0;
+                        let note: &str = item.1.as_str();
+                        if f64::abs(hov - bm_pct) < 0.015 {
+                            let clean_note = if note.len() > 18 {
+                                format!("{}...", &note[..18])
+                            } else {
+                                note.to_string()
+                            };
+                            time_str = format!("{} • {}", time_str, clean_note);
+                            break;
+                        }
+                    }
 
                     cr.set_font_size(9.0);
                     cr.select_font_face("monospace", gtk::cairo::FontSlant::Normal, gtk::cairo::FontWeight::Bold);
@@ -309,6 +347,7 @@ impl WaveformWidget {
             hover_pos,
             duration_ms,
             comments,
+            bookmarks,
             seek_callback,
         }
     }
@@ -345,6 +384,11 @@ impl WaveformWidget {
 
     pub fn set_comments(&self, comment_list: Vec<(f64, String)>) {
         *self.comments.borrow_mut() = comment_list;
+        self.drawing_area.queue_draw();
+    }
+
+    pub fn set_bookmarks(&self, bookmark_list: Vec<(f64, String, i64)>) {
+        *self.bookmarks.borrow_mut() = bookmark_list;
         self.drawing_area.queue_draw();
     }
 

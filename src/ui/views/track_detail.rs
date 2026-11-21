@@ -16,16 +16,27 @@ pub struct TrackDetailView {
     genre_label: gtk::Label,
     btn_play: gtk::Button,
     btn_like: gtk::Button,
+    btn_stash: gtk::Button,
     waveform: Rc<WaveformWidget>,
     comment_input: gtk::Entry,
     btn_post_comment: gtk::Button,
     comments_list: gtk::Box,
+    bookmark_input: gtk::Entry,
+    btn_add_bookmark: gtk::Button,
+    bookmarks_list: gtk::Box,
+    comments_section: gtk::Box,
+    bookmarks_section: gtk::Box,
+    tab_comments_btn: gtk::Button,
+    tab_bookmarks_btn: gtk::Button,
     current_track: Rc<RefCell<Option<Track>>>,
     current_position_ms: Rc<RefCell<u64>>,
     on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_seek: Rc<RefCell<Option<Box<dyn Fn(f64)>>>>,
     on_post_comment: Rc<RefCell<Option<Box<dyn Fn(u64, String, u64)>>>>,
     on_select_user: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
+    on_add_bookmark: Rc<RefCell<Option<Box<dyn Fn(u64, u64, String)>>>>,
+    on_delete_bookmark: Rc<RefCell<Option<Box<dyn Fn(i64)>>>>,
+    on_stash_toggle: Rc<RefCell<Option<Box<dyn Fn()>>>>,
 }
 
 impl TrackDetailView {
@@ -105,8 +116,15 @@ impl TrackDetailView {
             .tooltip_text("Like track")
             .build();
 
+        let btn_stash = gtk::Button::builder()
+            .icon_name("folder-download-symbolic")
+            .css_classes(["btn-transport"])
+            .tooltip_text("Stash track offline")
+            .build();
+
         actions_row.append(&btn_play);
         actions_row.append(&btn_like);
+        actions_row.append(&btn_stash);
 
         meta_box.append(&title_label);
         meta_box.append(&artist_label);
@@ -132,11 +150,39 @@ impl TrackDetailView {
         wave_frame.append(waveform.widget());
         container.append(&wave_frame);
 
-        // 3. Comment Input Box ("Add a comment at 1:42...")
+        // Tab switcher row (Community Comments vs Personal Bookmarks)
+        let tabs_switcher = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(8)
+            .margin_top(12)
+            .margin_bottom(8)
+            .build();
+
+        let tab_comments_btn = gtk::Button::builder()
+            .label("Community Comments")
+            .css_classes(["filter-chip", "active"])
+            .build();
+
+        let tab_bookmarks_btn = gtk::Button::builder()
+            .label("Personal Bookmarks & Notes")
+            .css_classes(["filter-chip"])
+            .build();
+
+        tabs_switcher.append(&tab_comments_btn);
+        tabs_switcher.append(&tab_bookmarks_btn);
+        container.append(&tabs_switcher);
+
+        // 3. Comments Section
+        let comments_section = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(12)
+            .margin_end(16)
+            .hexpand(true)
+            .build();
+
         let comment_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(12)
-            .margin_end(16)
             .build();
 
         let comment_input = gtk::Entry::builder()
@@ -152,25 +198,84 @@ impl TrackDetailView {
 
         comment_box.append(&comment_input);
         comment_box.append(&btn_post_comment);
-        container.append(&comment_box);
-
-        // 4. Community Comments Section
-        let comments_title = gtk::Label::builder()
-            .label("Community Comments")
-            .css_classes(["player-title"])
-            .halign(gtk::Align::Start)
-            .margin_end(16)
-            .margin_top(8)
-            .build();
-        container.append(&comments_title);
+        comments_section.append(&comment_box);
 
         let comments_list = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(8)
-            .margin_end(16)
             .hexpand(true)
             .build();
-        container.append(&comments_list);
+        comments_section.append(&comments_list);
+        container.append(&comments_section);
+
+        // 4. Personal Bookmarks Section
+        let bookmarks_section = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(12)
+            .margin_end(16)
+            .hexpand(true)
+            .visible(false)
+            .build();
+
+        let bookmark_input_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(12)
+            .build();
+
+        let bookmark_input = gtk::Entry::builder()
+            .placeholder_text("Add personal bookmark note at 0:00...")
+            .css_classes(["sc-search-entry"])
+            .hexpand(true)
+            .build();
+
+        let btn_add_bookmark = gtk::Button::builder()
+            .label("Bookmark (B)")
+            .css_classes(["filter-chip", "active"])
+            .build();
+
+        bookmark_input_box.append(&bookmark_input);
+        bookmark_input_box.append(&btn_add_bookmark);
+        bookmarks_section.append(&bookmark_input_box);
+
+        let bookmarks_list = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(8)
+            .hexpand(true)
+            .build();
+        bookmarks_section.append(&bookmarks_list);
+        container.append(&bookmarks_section);
+
+        // Connect tab toggling
+        let c_sec_c = comments_section.clone();
+        let b_sec_c = bookmarks_section.clone();
+        let c_btn_c = tab_comments_btn.clone();
+        let b_btn_c = tab_bookmarks_btn.clone();
+
+        tab_comments_btn.connect_clicked({
+            let c_sec_c = c_sec_c.clone();
+            let b_sec_c = b_sec_c.clone();
+            let c_btn_c = c_btn_c.clone();
+            let b_btn_c = b_btn_c.clone();
+            move |_| {
+                c_sec_c.set_visible(true);
+                b_sec_c.set_visible(false);
+                c_btn_c.add_css_class("active");
+                b_btn_c.remove_css_class("active");
+            }
+        });
+
+        tab_bookmarks_btn.connect_clicked({
+            let c_sec_c = c_sec_c.clone();
+            let b_sec_c = b_sec_c.clone();
+            let c_btn_c = c_btn_c.clone();
+            let b_btn_c = b_btn_c.clone();
+            move |_| {
+                c_sec_c.set_visible(false);
+                b_sec_c.set_visible(true);
+                c_btn_c.remove_css_class("active");
+                b_btn_c.add_css_class("active");
+            }
+        });
 
         let current_track: Rc<RefCell<Option<Track>>> = Rc::new(RefCell::new(None));
         let current_position_ms = Rc::new(RefCell::new(0));
@@ -178,6 +283,9 @@ impl TrackDetailView {
         let on_seek: Rc<RefCell<Option<Box<dyn Fn(f64)>>>> = Rc::new(RefCell::new(None));
         let on_post_comment: Rc<RefCell<Option<Box<dyn Fn(u64, String, u64)>>>> = Rc::new(RefCell::new(None));
         let on_select_user: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
+        let on_add_bookmark: Rc<RefCell<Option<Box<dyn Fn(u64, u64, String)>>>> = Rc::new(RefCell::new(None));
+        let on_delete_bookmark: Rc<RefCell<Option<Box<dyn Fn(i64)>>>> = Rc::new(RefCell::new(None));
+        let on_stash_toggle: Rc<RefCell<Option<Box<dyn Fn()>>>> = Rc::new(RefCell::new(None));
 
         // Click artist label to open their artist profile
         let user_sel_cb = Rc::clone(&on_select_user);
@@ -233,6 +341,36 @@ impl TrackDetailView {
             }
         });
 
+        // Connect add bookmark button
+        let add_bm_cb = Rc::clone(&on_add_bookmark);
+        let track_bm = Rc::clone(&current_track);
+        let pos_bm = Rc::clone(&current_position_ms);
+        let bm_input_c = bookmark_input.clone();
+
+        btn_add_bookmark.connect_clicked(move |_| {
+            let text = bm_input_c.text().trim().to_string();
+            let note = if text.is_empty() {
+                "Bookmark".to_string()
+            } else {
+                text
+            };
+            if let Some(ref t) = *track_bm.borrow() {
+                let pos = *pos_bm.borrow();
+                if let Some(ref cb) = *add_bm_cb.borrow() {
+                    cb(t.id, pos, note);
+                }
+                bm_input_c.set_text("");
+            }
+        });
+
+        // Connect stash toggle
+        let stash_cb = Rc::clone(&on_stash_toggle);
+        btn_stash.connect_clicked(move |_| {
+            if let Some(ref cb) = *stash_cb.borrow() {
+                cb();
+            }
+        });
+
         Self {
             scrolled,
             container,
@@ -242,16 +380,27 @@ impl TrackDetailView {
             genre_label,
             btn_play,
             btn_like,
+            btn_stash,
             waveform,
             comment_input,
             btn_post_comment,
             comments_list,
+            bookmark_input,
+            btn_add_bookmark,
+            bookmarks_list,
+            comments_section,
+            bookmarks_section,
+            tab_comments_btn,
+            tab_bookmarks_btn,
             current_track,
             current_position_ms,
             on_play_track,
             on_seek,
             on_post_comment,
             on_select_user,
+            on_add_bookmark,
+            on_delete_bookmark,
+            on_stash_toggle,
         }
     }
 
@@ -286,6 +435,10 @@ impl TrackDetailView {
         }
         self.comment_input.set_placeholder_text(Some(&format!(
             "Write a comment at {}...",
+            format_milliseconds(position_ms)
+        )));
+        self.bookmark_input.set_placeholder_text(Some(&format!(
+            "Add personal note at {} (or press B)...",
             format_milliseconds(position_ms)
         )));
     }
@@ -424,5 +577,118 @@ impl TrackDetailView {
 
     pub fn connect_select_user<F: Fn(u64) + 'static>(&self, f: F) {
         *self.on_select_user.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn set_stashed(&self, stashed: bool) {
+        if stashed {
+            self.btn_stash.set_icon_name("emblem-ok-symbolic");
+            self.btn_stash.add_css_class("btn-heart-liked");
+            self.btn_stash.set_tooltip_text(Some("Stashed Offline (Click to remove)"));
+        } else {
+            self.btn_stash.set_icon_name("folder-download-symbolic");
+            self.btn_stash.remove_css_class("btn-heart-liked");
+            self.btn_stash.set_tooltip_text(Some("Stash Track Offline"));
+        }
+    }
+
+    pub fn set_bookmarks(&self, bookmarks: Vec<crate::db::storage::Bookmark>, duration_ms: u64) {
+        while let Some(child) = self.bookmarks_list.first_child() {
+            self.bookmarks_list.remove(&child);
+        }
+
+        let mut markers = Vec::new();
+        for b in &bookmarks {
+            if duration_ms > 0 {
+                let pct = (b.timestamp_ms as f64 / duration_ms as f64).clamp(0.0, 1.0);
+                markers.push((pct, b.note.clone(), b.id));
+            }
+        }
+        self.waveform.set_bookmarks(markers);
+
+        if bookmarks.is_empty() {
+            let empty_lbl = gtk::Label::builder()
+                .label("No personal bookmarks for this track yet. Press B or write a note above to add one.")
+                .css_classes(["player-artist"])
+                .margin_top(20)
+                .build();
+            self.bookmarks_list.append(&empty_lbl);
+            return;
+        }
+
+        for bm in bookmarks {
+            let row = gtk::Box::builder()
+                .orientation(gtk::Orientation::Horizontal)
+                .spacing(12)
+                .css_classes(["track-card"])
+                .margin_top(4)
+                .margin_bottom(4)
+                .margin_start(6)
+                .margin_end(6)
+                .build();
+
+            let ts_btn = gtk::Button::builder()
+                .label(&format_milliseconds(bm.timestamp_ms))
+                .css_classes(["filter-chip", "active"])
+                .valign(gtk::Align::Center)
+                .build();
+
+            let seek_cb = Rc::clone(&self.on_seek);
+            let ts_ms = bm.timestamp_ms;
+            ts_btn.connect_clicked(move |_| {
+                if duration_ms > 0 {
+                    let pct = (ts_ms as f64 / duration_ms as f64).clamp(0.0, 1.0);
+                    if let Some(ref cb) = *seek_cb.borrow() {
+                        cb(pct);
+                    }
+                }
+            });
+
+            let note_lbl = gtk::Label::builder()
+                .label(&bm.note)
+                .css_classes(["player-title"])
+                .halign(gtk::Align::Start)
+                .hexpand(true)
+                .ellipsize(gtk::pango::EllipsizeMode::End)
+                .build();
+
+            let time_lbl = gtk::Label::builder()
+                .label(&bm.created_at)
+                .css_classes(["time-label"])
+                .halign(gtk::Align::End)
+                .build();
+
+            let del_btn = gtk::Button::builder()
+                .icon_name("user-trash-symbolic")
+                .css_classes(["btn-card-like"])
+                .valign(gtk::Align::Center)
+                .tooltip_text("Delete bookmark")
+                .build();
+
+            let del_cb = Rc::clone(&self.on_delete_bookmark);
+            let bm_id = bm.id;
+            del_btn.connect_clicked(move |_| {
+                if let Some(ref cb) = *del_cb.borrow() {
+                    cb(bm_id);
+                }
+            });
+
+            row.append(&ts_btn);
+            row.append(&note_lbl);
+            row.append(&time_lbl);
+            row.append(&del_btn);
+            self.bookmarks_list.append(&row);
+        }
+    }
+
+    pub fn connect_add_bookmark<F: Fn(u64, u64, String) + 'static>(&self, f: F) {
+        *self.on_add_bookmark.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_delete_bookmark<F: Fn(i64) + 'static>(&self, f: F) {
+        *self.on_delete_bookmark.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_stash<F: Fn() + 'static>(&self, f: F) {
+        *self.on_stash_toggle.borrow_mut() = Some(Box::new(f));
     }
 }

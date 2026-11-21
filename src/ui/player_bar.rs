@@ -13,11 +13,16 @@ pub struct PlayerBar {
     title_label: gtk::Label,
     artist_label: gtk::Label,
     like_btn: gtk::Button,
+    btn_bookmark: gtk::Button,
+    btn_stash: gtk::Button,
     btn_play_pause: gtk::Button,
     btn_prev: gtk::Button,
     btn_next: gtk::Button,
     btn_shuffle: gtk::Button,
     btn_repeat: gtk::Button,
+    btn_speed: gtk::Button,
+    btn_sleep: gtk::Button,
+    sleep_status_lbl: gtk::Label,
     waveform: Rc<WaveformWidget>,
     time_current: gtk::Label,
     time_total: gtk::Label,
@@ -31,12 +36,17 @@ pub struct PlayerBar {
     current_track: Rc<RefCell<Option<Track>>>,
     is_playing: Rc<RefCell<bool>>,
     is_liked: Rc<RefCell<bool>>,
+    is_stashed: Rc<RefCell<bool>>,
     saved_volume: Rc<Cell<f64>>,
     is_muted: Rc<Cell<bool>>,
     on_queue_jump: Rc<RefCell<Option<Box<dyn Fn(usize)>>>>,
     on_queue_remove: Rc<RefCell<Option<Box<dyn Fn(usize)>>>>,
     on_queue_clear: Rc<RefCell<Option<Box<dyn Fn()>>>>,
     on_toggle_mini: Rc<RefCell<Option<Box<dyn Fn()>>>>,
+    on_speed_change: Rc<RefCell<Option<Box<dyn Fn(f64)>>>>,
+    on_sleep_timer: Rc<RefCell<Option<Box<dyn Fn(Option<u32>, bool)>>>>,
+    on_add_bookmark: Rc<RefCell<Option<Box<dyn Fn()>>>>,
+    on_stash_toggle: Rc<RefCell<Option<Box<dyn Fn()>>>>,
 }
 
 impl PlayerBar {
@@ -130,9 +140,25 @@ impl PlayerBar {
             .valign(gtk::Align::Center)
             .build();
 
+        let btn_bookmark = gtk::Button::builder()
+            .icon_name("bookmark-new-symbolic")
+            .css_classes(["btn-transport"])
+            .tooltip_text("Add Bookmark at current position (B)")
+            .valign(gtk::Align::Center)
+            .build();
+
+        let btn_stash = gtk::Button::builder()
+            .icon_name("folder-download-symbolic")
+            .css_classes(["btn-transport"])
+            .tooltip_text("Stash track offline")
+            .valign(gtk::Align::Center)
+            .build();
+
         info_box.append(&artwork);
         info_box.append(&titles_vbox);
         info_box.append(&like_btn);
+        info_box.append(&btn_bookmark);
+        info_box.append(&btn_stash);
 
         // 2. Center section: Transport Buttons
         let center_box = gtk::Box::builder()
@@ -338,6 +364,159 @@ impl PlayerBar {
             q_pop_c.popup();
         });
 
+        // Playback Speed Button & Popover (0.5x - 2.5x)
+        let btn_speed = gtk::Button::builder()
+            .label("1.0x")
+            .css_classes(["btn-transport", "filter-chip"])
+            .tooltip_text("Playback Speed (0.5x - 2.5x)")
+            .valign(gtk::Align::Center)
+            .build();
+
+        let speed_popover = gtk::Popover::builder()
+            .autohide(true)
+            .has_arrow(true)
+            .position(gtk::PositionType::Top)
+            .build();
+        speed_popover.set_parent(&btn_speed);
+
+        let speed_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(8)
+            .margin_top(10)
+            .margin_bottom(10)
+            .margin_start(12)
+            .margin_end(12)
+            .width_request(220)
+            .build();
+
+        let speed_title = gtk::Label::builder()
+            .label("Playback Speed")
+            .css_classes(["brand-label"])
+            .halign(gtk::Align::Start)
+            .build();
+        speed_box.append(&speed_title);
+
+        let presets_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(4)
+            .halign(gtk::Align::Center)
+            .build();
+
+        let speed_slider = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.5, 2.5, 0.05);
+        speed_slider.set_value(1.0);
+        speed_slider.set_hexpand(true);
+        speed_slider.add_css_class("volume-scale");
+
+        let speed_val_lbl = gtk::Label::builder()
+            .label("1.00x")
+            .css_classes(["time-label"])
+            .halign(gtk::Align::End)
+            .width_chars(5)
+            .build();
+
+        let presets: [f64; 5] = [0.75, 1.0, 1.25, 1.5, 2.0];
+        for sp in presets {
+            let chip = gtk::Button::builder()
+                .label(&format!("{:.2}x", sp).replace(".00", "").replace("0x", "x"))
+                .css_classes(["filter-chip"])
+                .build();
+            let s_slider = speed_slider.clone();
+            chip.connect_clicked(move |_| {
+                s_slider.set_value(sp);
+            });
+            presets_box.append(&chip);
+        }
+        speed_box.append(&presets_box);
+
+        let slider_row = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(8)
+            .build();
+        slider_row.append(&speed_slider);
+        slider_row.append(&speed_val_lbl);
+        speed_box.append(&slider_row);
+        speed_popover.set_child(Some(&speed_box));
+
+        let sp_pop_c = speed_popover.clone();
+        btn_speed.connect_clicked(move |_| {
+            sp_pop_c.popup();
+        });
+
+        // Sleep Timer Button & Popover
+        let btn_sleep = gtk::Button::builder()
+            .icon_name("alarm-symbolic")
+            .css_classes(["btn-transport"])
+            .tooltip_text("Sleep Timer")
+            .valign(gtk::Align::Center)
+            .build();
+
+        let sleep_popover = gtk::Popover::builder()
+            .autohide(true)
+            .has_arrow(true)
+            .position(gtk::PositionType::Top)
+            .build();
+        sleep_popover.set_parent(&btn_sleep);
+
+        let sleep_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(8)
+            .margin_top(10)
+            .margin_bottom(10)
+            .margin_start(12)
+            .margin_end(12)
+            .width_request(240)
+            .build();
+
+        let sleep_title = gtk::Label::builder()
+            .label("Sleep Timer")
+            .css_classes(["brand-label"])
+            .halign(gtk::Align::Start)
+            .build();
+
+        let sleep_status_lbl = gtk::Label::builder()
+            .label("Off")
+            .css_classes(["player-artist"])
+            .halign(gtk::Align::Start)
+            .build();
+
+        sleep_box.append(&sleep_title);
+        sleep_box.append(&sleep_status_lbl);
+
+        let on_sleep_timer: Rc<RefCell<Option<Box<dyn Fn(Option<u32>, bool)>>>> = Rc::new(RefCell::new(None));
+
+        let sleep_opts: Vec<(&str, Option<u32>, bool)> = vec![
+            ("Turn Off", None, false),
+            ("15 Minutes", Some(15 * 60), false),
+            ("30 Minutes", Some(30 * 60), false),
+            ("45 Minutes", Some(45 * 60), false),
+            ("60 Minutes", Some(60 * 60), false),
+            ("End of Track", None, true),
+        ];
+
+        for (lbl, secs, end_track) in sleep_opts {
+            let opt_btn = gtk::Button::builder()
+                .label(lbl)
+                .css_classes(["filter-chip"])
+                .halign(gtk::Align::Fill)
+                .build();
+            let sleep_cb_c = Rc::clone(&on_sleep_timer);
+            let pop_c = sleep_popover.clone();
+            opt_btn.connect_clicked(move |_| {
+                if let Some(ref cb) = *sleep_cb_c.borrow() {
+                    cb(secs, end_track);
+                }
+                pop_c.popdown();
+            });
+            sleep_box.append(&opt_btn);
+        }
+
+        sleep_popover.set_child(Some(&sleep_box));
+
+        let sl_pop_c = sleep_popover.clone();
+        btn_sleep.connect_clicked(move |_| {
+            sl_pop_c.popup();
+        });
+
         // Mini-player toggle button
         let btn_mini = gtk::Button::builder()
             .icon_name("view-restore-symbolic")
@@ -346,6 +525,8 @@ impl PlayerBar {
             .valign(gtk::Align::Center)
             .build();
 
+        right_box.append(&btn_speed);
+        right_box.append(&btn_sleep);
         right_box.append(&btn_queue);
         right_box.append(&share_btn);
         right_box.append(&btn_mini);
@@ -377,10 +558,15 @@ impl PlayerBar {
             }
         });
 
+        let is_stashed = Rc::new(RefCell::new(false));
+
         let on_queue_jump: Rc<RefCell<Option<Box<dyn Fn(usize)>>>> = Rc::new(RefCell::new(None));
         let on_queue_remove: Rc<RefCell<Option<Box<dyn Fn(usize)>>>> = Rc::new(RefCell::new(None));
         let on_queue_clear: Rc<RefCell<Option<Box<dyn Fn()>>>> = Rc::new(RefCell::new(None));
         let on_toggle_mini: Rc<RefCell<Option<Box<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+        let on_speed_change: Rc<RefCell<Option<Box<dyn Fn(f64)>>>> = Rc::new(RefCell::new(None));
+        let on_add_bookmark: Rc<RefCell<Option<Box<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+        let on_stash_toggle: Rc<RefCell<Option<Box<dyn Fn()>>>> = Rc::new(RefCell::new(None));
 
         let clear_cb_c = Rc::clone(&on_queue_clear);
         q_clear_btn.connect_clicked(move |_| {
@@ -396,17 +582,54 @@ impl PlayerBar {
             }
         });
 
+        let btn_speed_clone = btn_speed.clone();
+        let speed_val_clone = speed_val_lbl.clone();
+        let speed_cb_c = Rc::clone(&on_speed_change);
+        speed_slider.connect_value_changed(move |scale| {
+            let val = scale.value();
+            let val = if (val - 1.0).abs() < 0.03 { 1.0 } else { val };
+            let lbl = if (val - 1.0).abs() < 0.01 {
+                "1.0x".to_string()
+            } else {
+                format!("{:.2}x", val)
+            };
+            btn_speed_clone.set_label(&lbl);
+            speed_val_clone.set_label(&format!("{:.2}x", val));
+            if let Some(ref cb) = *speed_cb_c.borrow() {
+                cb(val);
+            }
+        });
+
+        let bm_cb_c = Rc::clone(&on_add_bookmark);
+        btn_bookmark.connect_clicked(move |_| {
+            if let Some(ref cb) = *bm_cb_c.borrow() {
+                cb();
+            }
+        });
+
+        let stash_cb_c = Rc::clone(&on_stash_toggle);
+        btn_stash.connect_clicked(move |_| {
+            if let Some(ref cb) = *stash_cb_c.borrow() {
+                cb();
+            }
+        });
+
         Self {
             container,
             artwork,
             title_label,
             artist_label,
             like_btn,
+            btn_bookmark,
+            btn_stash,
             btn_play_pause,
             btn_prev,
             btn_next,
             btn_shuffle,
             btn_repeat,
+            btn_speed,
+            btn_sleep,
+            sleep_status_lbl,
             waveform,
             time_current,
             time_total,
@@ -420,12 +643,17 @@ impl PlayerBar {
             current_track,
             is_playing,
             is_liked,
+            is_stashed,
             saved_volume,
             is_muted,
             on_queue_jump,
             on_queue_remove,
             on_queue_clear,
             on_toggle_mini,
+            on_speed_change,
+            on_sleep_timer,
+            on_add_bookmark,
+            on_stash_toggle,
         }
     }
 
@@ -733,5 +961,62 @@ impl PlayerBar {
 
     pub fn connect_toggle_mini<F: Fn() + 'static>(&self, f: F) {
         *self.on_toggle_mini.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn set_stashed(&self, stashed: bool) {
+        *self.is_stashed.borrow_mut() = stashed;
+        if stashed {
+            self.btn_stash.set_icon_name("emblem-ok-symbolic");
+            self.btn_stash.add_css_class("btn-heart-liked");
+            self.btn_stash.set_tooltip_text(Some("Stashed Offline (Click to remove)"));
+        } else {
+            self.btn_stash.set_icon_name("folder-download-symbolic");
+            self.btn_stash.remove_css_class("btn-heart-liked");
+            self.btn_stash.set_tooltip_text(Some("Stash Track Offline"));
+        }
+    }
+
+    pub fn set_speed(&self, speed: f64) {
+        let label = if (speed - 1.0).abs() < 0.01 {
+            "1.0x".to_string()
+        } else {
+            format!("{:.2}x", speed)
+        };
+        self.btn_speed.set_label(&label);
+    }
+
+    pub fn update_sleep_timer_status(&self, remaining_sec_opt: Option<u64>, is_end_of_track: bool) {
+        if is_end_of_track {
+            self.btn_sleep.add_css_class("active");
+            self.sleep_status_lbl.set_label("Pausing at end of current track");
+            self.btn_sleep.set_tooltip_text(Some("Sleep Timer: End of Track"));
+        } else if let Some(rem) = remaining_sec_opt {
+            self.btn_sleep.add_css_class("active");
+            let m = rem / 60;
+            let s = rem % 60;
+            let text = format!("Fade-out & pause in {:02}:{:02}", m, s);
+            self.sleep_status_lbl.set_label(&text);
+            self.btn_sleep.set_tooltip_text(Some(&format!("Sleep Timer: {:02}:{:02}", m, s)));
+        } else {
+            self.btn_sleep.remove_css_class("active");
+            self.sleep_status_lbl.set_label("Off");
+            self.btn_sleep.set_tooltip_text(Some("Sleep Timer"));
+        }
+    }
+
+    pub fn connect_speed<F: Fn(f64) + 'static>(&self, f: F) {
+        *self.on_speed_change.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_sleep_timer<F: Fn(Option<u32>, bool) + 'static>(&self, f: F) {
+        *self.on_sleep_timer.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_add_bookmark<F: Fn() + 'static>(&self, f: F) {
+        *self.on_add_bookmark.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_stash<F: Fn() + 'static>(&self, f: F) {
+        *self.on_stash_toggle.borrow_mut() = Some(Box::new(f));
     }
 }

@@ -17,6 +17,7 @@ pub struct AudioEngine {
     state: Arc<Mutex<PlaybackState>>,
     callback: Arc<Mutex<Option<AudioCallback>>>,
     current_duration_ms: Arc<Mutex<u64>>,
+    volume: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl AudioEngine {
@@ -25,6 +26,7 @@ impl AudioEngine {
         let state = Arc::new(Mutex::new(PlaybackState::Stopped));
         let callback: Arc<Mutex<Option<AudioCallback>>> = Arc::new(Mutex::new(None));
         let current_duration_ms = Arc::new(Mutex::new(0));
+        let volume = Arc::new(std::sync::atomic::AtomicU64::new(1000));
 
         // 1. Prefer hardware-accelerated PipeWire/ALSA MPV backend
         let mpv_driver = match MpvDriver::new() {
@@ -78,6 +80,7 @@ impl AudioEngine {
             state,
             callback,
             current_duration_ms,
+            volume,
         };
 
         if engine.gst_pipeline.is_some() {
@@ -249,12 +252,31 @@ impl AudioEngine {
     }
 
     pub fn set_volume(&self, volume: f64) {
+        self.volume.store((volume * 1000.0) as u64, std::sync::atomic::Ordering::Relaxed);
         if let Some(ref mpv) = self.mpv {
             mpv.set_volume(volume);
         } else if let Some(ref pipeline) = self.gst_pipeline {
             use gstreamer::prelude::*;
             let clamped = volume.clamp(0.0, 1.5);
             pipeline.set_property("volume", clamped);
+        }
+    }
+
+    pub fn get_volume(&self) -> f64 {
+        self.volume.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1000.0
+    }
+
+    pub fn set_speed(&self, speed: f64) {
+        if let Some(ref mpv) = self.mpv {
+            mpv.set_speed(speed);
+        }
+    }
+
+    pub fn get_speed(&self) -> f64 {
+        if let Some(ref mpv) = self.mpv {
+            mpv.get_speed()
+        } else {
+            1.0
         }
     }
 

@@ -23,6 +23,10 @@ pub struct AppState {
     pub current_track: Rc<RefCell<Option<Track>>>,
     pub pending_resume_pos: Rc<RefCell<Option<u64>>>,
     pub play_request_counter: std::sync::atomic::AtomicU64,
+    pub sleep_timer_end: Rc<RefCell<Option<std::time::Instant>>>,
+    pub sleep_timer_track_end: Rc<RefCell<bool>>,
+    pub original_volume: Rc<RefCell<f64>>,
+    pub in_fade_out: Rc<RefCell<bool>>,
 }
 
 pub struct Application {
@@ -44,6 +48,10 @@ impl Application {
             current_track: Rc::new(RefCell::new(None)),
             pending_resume_pos: Rc::new(RefCell::new(None)),
             play_request_counter: std::sync::atomic::AtomicU64::new(0),
+            sleep_timer_end: Rc::new(RefCell::new(None)),
+            sleep_timer_track_end: Rc::new(RefCell::new(false)),
+            original_volume: Rc::new(RefCell::new(1.0)),
+            in_fade_out: Rc::new(RefCell::new(false)),
         });
 
         let window = Rc::new(MainWindow::new(app));
@@ -226,6 +234,10 @@ impl Application {
                     let dur = audio_key.get_duration_ms();
                     let target = (cur + 5000).min(dur);
                     let _ = audio_key.seek(target);
+                    glib::Propagation::Stop
+                }
+                gdk4::Key::b | gdk4::Key::B => {
+                    handle_add_bookmark_quick(&state_key, &win_key, "Bookmark");
                     glib::Propagation::Stop
                 }
                 _ => glib::Propagation::Proceed,
@@ -479,6 +491,37 @@ impl Application {
                 }
             }
 
+            // Smart Sleep Timer processing
+            let now = std::time::Instant::now();
+            if let Some(target) = *state_sync.sleep_timer_end.borrow() {
+                if now >= target {
+                    // Timer expired: pause playback, restore original volume, reset timer UI
+                    audio_c.pause();
+                    let orig_vol = *state_sync.original_volume.borrow();
+                    audio_c.set_volume(orig_vol);
+                    *state_sync.sleep_timer_end.borrow_mut() = None;
+                    *state_sync.in_fade_out.borrow_mut() = false;
+                    win_c.player_bar().update_sleep_timer_status(None, false);
+                    win_c.player_bar().update_playback_state(false);
+                    win_c.mini_player().update_playback_state(false);
+                } else {
+                    let rem_sec = target.duration_since(now).as_secs();
+                    win_c.player_bar().update_sleep_timer_status(Some(rem_sec), false);
+
+                    // Final 20 seconds: smooth logarithmic/quadratic fade-out down to 0
+                    if rem_sec <= 20 {
+                        let rem_millis = target.duration_since(now).as_millis() as f64;
+                        let ratio = (rem_millis / 20_000.0).clamp(0.0, 1.0);
+                        let fade = ratio * ratio; // quadratic fade
+                        let orig_vol = *state_sync.original_volume.borrow();
+                        audio_c.set_volume(orig_vol * fade);
+                        *state_sync.in_fade_out.borrow_mut() = true;
+                    }
+                }
+            } else if *state_sync.sleep_timer_track_end.borrow() {
+                win_c.player_bar().update_sleep_timer_status(None, true);
+            }
+
             glib::ControlFlow::Continue
         });
     }
@@ -496,6 +539,18 @@ impl Application {
             while let Some(evt) = rx.recv().await {
                 match evt {
                     crate::audio::AudioEvent::TrackEnded => {
+                        if *state_c.sleep_timer_track_end.borrow() {
+                            *state_c.sleep_timer_track_end.borrow_mut() = false;
+                            state_c.audio.pause();
+                            win_c.player_bar().update_sleep_timer_status(None, false);
+                            win_c.player_bar().update_playback_state(false);
+                            win_c.mini_player().update_playback_state(false);
+                            if let Some(ref m) = *state_c.mpris.borrow() {
+                                m.update_status(mpris_server::PlaybackStatus::Paused).await;
+                            }
+                            continue;
+                        }
+
                         let next = state_c.audio.get_queue().lock().unwrap().next_track();
                         if let Some(track) = next {
                             let _ = play_track_internal(&state_c, &win_c, track).await;
@@ -763,6 +818,53 @@ impl Application {
             let curr = q.current.clone();
             drop(q);
             win_q_clr.player_bar().update_queue(curr.as_ref(), &[]);
+        });
+
+        // Pitch-Preserving Speed Control (0.5x - 2.5x)
+        let audio_spd = Arc::clone(&audio_c);
+        player_bar.connect_speed(move |spd| {
+            audio_spd.set_speed(spd);
+        });
+
+        // Smart Sleep Timer
+        let state_sl = Rc::clone(&state_c);
+        let win_sl = Rc::clone(&win_c);
+        player_bar.connect_sleep_timer(move |secs_opt, end_of_track| {
+            if end_of_track {
+                *state_sl.sleep_timer_track_end.borrow_mut() = true;
+                *state_sl.sleep_timer_end.borrow_mut() = None;
+                win_sl.player_bar().update_sleep_timer_status(None, true);
+            } else if let Some(secs) = secs_opt {
+                let target = std::time::Instant::now() + std::time::Duration::from_secs(secs as u64);
+                *state_sl.sleep_timer_end.borrow_mut() = Some(target);
+                *state_sl.sleep_timer_track_end.borrow_mut() = false;
+                *state_sl.original_volume.borrow_mut() = state_sl.audio.get_volume();
+                win_sl.player_bar().update_sleep_timer_status(Some(secs as u64), false);
+            } else {
+                *state_sl.sleep_timer_end.borrow_mut() = None;
+                *state_sl.sleep_timer_track_end.borrow_mut() = false;
+                if *state_sl.in_fade_out.borrow() {
+                    state_sl.audio.set_volume(*state_sl.original_volume.borrow());
+                    *state_sl.in_fade_out.borrow_mut() = false;
+                }
+                win_sl.player_bar().update_sleep_timer_status(None, false);
+            }
+        });
+
+        // Quick Bookmark from Player Bar
+        let state_bm_pb = Rc::clone(&state_c);
+        let win_bm_pb = Rc::clone(&win_c);
+        player_bar.connect_add_bookmark(move || {
+            handle_add_bookmark_quick(&state_bm_pb, &win_bm_pb, "Bookmark");
+        });
+
+        // Stash Toggle from Player Bar
+        let state_st_pb = Rc::clone(&state_c);
+        let win_st_pb = Rc::clone(&win_c);
+        player_bar.connect_stash(move || {
+            if let Some(ref track) = *state_st_pb.current_track.borrow() {
+                handle_toggle_stash_internal(&state_st_pb, &win_st_pb, track.clone());
+            }
         });
 
         // Wire Mini Player controls
@@ -1140,6 +1242,29 @@ impl Application {
                         w_lib_tab.library_view.set_tracks(tracks);
                     }
                 }
+                crate::ui::views::LibraryTab::Stash => {
+                    if let Ok(stashed) = s_lib_tab.db.get_stashed_tracks() {
+                        w_lib_tab.library_view.set_stashed_tracks(stashed);
+                    }
+                }
+            }
+        });
+
+        let s_lib_rem_st = Rc::clone(&state_c);
+        let w_lib_rem_st = Rc::clone(&win_c);
+        self.window.library_view.connect_remove_stash(move |track_id| {
+            if let Some(path) = s_lib_rem_st.db.get_stashed_file_path(track_id) {
+                let _ = std::fs::remove_file(path);
+            }
+            let _ = s_lib_rem_st.db.remove_stashed_track(track_id);
+            if let Ok(stashed) = s_lib_rem_st.db.get_stashed_tracks() {
+                w_lib_rem_st.library_view.set_stashed_tracks(stashed);
+            }
+            if let Some(ref cur) = *s_lib_rem_st.current_track.borrow() {
+                if cur.id == track_id {
+                    w_lib_rem_st.player_bar().set_stashed(false);
+                    w_lib_rem_st.track_detail_view.set_stashed(false);
+                }
             }
         });
 
@@ -1334,6 +1459,47 @@ impl Application {
         let w_td_usr = Rc::clone(&win_c);
         self.window.track_detail_view.connect_select_user(move |user_id| {
             show_artist_profile_internal(&s_td_usr, &w_td_usr, user_id);
+        });
+
+        // Track Detail Personal Bookmarks & Stash
+        let s_td_bm = Rc::clone(&state_c);
+        let w_td_bm = Rc::clone(&win_c);
+        self.window.track_detail_view.connect_add_bookmark(move |track_id, timestamp_ms, note| {
+            let _ = s_td_bm.db.add_bookmark(track_id, timestamp_ms, &note);
+            let dur = s_td_bm.audio.get_duration_ms();
+            if let Ok(bms) = s_td_bm.db.get_bookmarks(track_id) {
+                w_td_bm.track_detail_view.set_bookmarks(bms.clone(), dur);
+                let markers: Vec<(f64, String, i64)> = bms.into_iter().map(|b| {
+                    let pct = if dur > 0 { (b.timestamp_ms as f64 / dur as f64).clamp(0.0, 1.0) } else { 0.0 };
+                    (pct, b.note, b.id)
+                }).collect();
+                w_td_bm.player_bar().waveform().set_bookmarks(markers);
+            }
+        });
+
+        let s_td_del_bm = Rc::clone(&state_c);
+        let w_td_del_bm = Rc::clone(&win_c);
+        self.window.track_detail_view.connect_delete_bookmark(move |bookmark_id| {
+            let _ = s_td_del_bm.db.delete_bookmark(bookmark_id);
+            if let Some(ref track) = *s_td_del_bm.current_track.borrow() {
+                let dur = s_td_del_bm.audio.get_duration_ms();
+                if let Ok(bms) = s_td_del_bm.db.get_bookmarks(track.id) {
+                    w_td_del_bm.track_detail_view.set_bookmarks(bms.clone(), dur);
+                    let markers: Vec<(f64, String, i64)> = bms.into_iter().map(|b| {
+                        let pct = if dur > 0 { (b.timestamp_ms as f64 / dur as f64).clamp(0.0, 1.0) } else { 0.0 };
+                        (pct, b.note, b.id)
+                    }).collect();
+                    w_td_del_bm.player_bar().waveform().set_bookmarks(markers);
+                }
+            }
+        });
+
+        let s_td_stash = Rc::clone(&state_c);
+        let w_td_stash = Rc::clone(&win_c);
+        self.window.track_detail_view.connect_stash(move || {
+            if let Some(ref track) = *s_td_stash.current_track.borrow() {
+                handle_toggle_stash_internal(&s_td_stash, &w_td_stash, track.clone());
+            }
         });
 
         // 6. Upload View
@@ -1938,8 +2104,42 @@ async fn play_track_internal_with_seek(
 
     *state.current_track.borrow_mut() = Some(track.clone());
 
-    // 3. Resolve playable audio stream URL (HLS / progressive)
-    match state.client.get_stream_url(&track).await {
+    // 3. Resolve playable audio stream: Check if stashed locally for zero-latency offline playback
+    let local_file = if let Some(path) = state.db.get_stashed_file_path(track.id) {
+        if std::path::Path::new(&path).exists() {
+            Some(format!("file://{}", path))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let stream_res = if let Some(local_uri) = local_file {
+        info!("Instant offline playback from stash: {}", local_uri);
+        Ok(local_uri)
+    } else {
+        state.client.get_stream_url(&track).await
+    };
+
+    // Update stash status on player bar and track detail
+    let is_stashed = state.db.is_track_stashed(track.id);
+    window.player_bar().set_stashed(is_stashed);
+    if window.track_detail_view.widget().is_visible() {
+        window.track_detail_view.set_stashed(is_stashed);
+    }
+
+    // Load and render personal bookmarks for this track on waveform
+    if let Ok(bms) = state.db.get_bookmarks(track.id) {
+        let dur = track.duration;
+        let markers: Vec<(f64, String, i64)> = bms.iter().map(|b| {
+            let pct = if dur > 0 { (b.timestamp_ms as f64 / dur as f64).clamp(0.0, 1.0) } else { 0.0 };
+            (pct, b.note.clone(), b.id)
+        }).collect();
+        window.player_bar().waveform().set_bookmarks(markers);
+    }
+
+    match stream_res {
         Ok(stream_url) => {
             if state.play_request_counter.load(std::sync::atomic::Ordering::SeqCst) != req_id {
                 return Ok(());
@@ -2003,6 +2203,13 @@ fn show_track_detail_internal(
 
         win_c.track_detail_view.set_track(track, samples);
         win_c.show_view("track_detail");
+
+        // Load personal bookmarks and stash state for track
+        if let Ok(bms) = s_c.db.get_bookmarks(track_id) {
+            win_c.track_detail_view.set_bookmarks(bms, dur);
+        }
+        let is_stashed = s_c.db.is_track_stashed(track_id);
+        win_c.track_detail_view.set_stashed(is_stashed);
 
         // Fetch comments asynchronously
         let client = s_c.client.clone();
@@ -2071,6 +2278,92 @@ fn handle_track_like_internal(
     glib::spawn_future_local(async move {
         if let Err(e) = client.toggle_like(track_id, liked).await {
             warn!("Failed to toggle like on track {}: {}", track_id, e);
+        }
+    });
+}
+
+fn handle_add_bookmark_quick(state: &Rc<AppState>, window: &Rc<MainWindow>, note: &str) {
+    if let Some(ref track) = *state.current_track.borrow() {
+        let pos = state.audio.get_position_ms();
+        let _ = state.db.add_bookmark(track.id, pos, note);
+        let dur = track.duration;
+        if let Ok(bms) = state.db.get_bookmarks(track.id) {
+            let markers: Vec<(f64, String, i64)> = bms.iter().map(|b| {
+                let pct = if dur > 0 { (b.timestamp_ms as f64 / dur as f64).clamp(0.0, 1.0) } else { 0.0 };
+                (pct, b.note.clone(), b.id)
+            }).collect();
+            window.player_bar().waveform().set_bookmarks(markers);
+            if window.track_detail_view.widget().is_visible() {
+                window.track_detail_view.set_bookmarks(bms, dur);
+            }
+        }
+    }
+}
+
+fn handle_toggle_stash_internal(state: &Rc<AppState>, window: &Rc<MainWindow>, track: Track) {
+    let s = Rc::clone(state);
+    let w = Rc::clone(window);
+    glib::spawn_future_local(async move {
+        let is_stashed = s.db.is_track_stashed(track.id);
+        if is_stashed {
+            // Remove from stash
+            if let Some(path) = s.db.get_stashed_file_path(track.id) {
+                let _ = std::fs::remove_file(path);
+            }
+            let _ = s.db.remove_stashed_track(track.id);
+            w.player_bar().set_stashed(false);
+            w.track_detail_view.set_stashed(false);
+            info!("Track {} removed from offline stash", track.id);
+        } else {
+            // Download track stream to ~/.local/share/cloudpulse/stash/<track_id>.m4a
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            let stash_dir = std::path::PathBuf::from(home).join(".local/share/cloudpulse/stash");
+            let _ = std::fs::create_dir_all(&stash_dir);
+            let dest_file = stash_dir.join(format!("{}.m4a", track.id));
+
+            match s.client.get_stream_url(&track).await {
+                Ok(stream_url) => {
+                    info!("Stashing track {} via ffmpeg from {}", track.id, stream_url);
+                    let status = tokio::process::Command::new("ffmpeg")
+                        .arg("-y")
+                        .arg("-i")
+                        .arg(&stream_url)
+                        .arg("-c")
+                        .arg("copy")
+                        .arg("-movflags")
+                        .arg("+faststart")
+                        .arg(&dest_file)
+                        .status()
+                        .await;
+
+                    match status {
+                        Ok(exit_code) if exit_code.success() => {
+                            let file_size = std::fs::metadata(&dest_file).map(|m| m.len()).unwrap_or(0);
+                            let _ = s.db.save_stashed_track(&track, dest_file.to_str().unwrap_or(""), file_size);
+                            w.player_bar().set_stashed(true);
+                            w.track_detail_view.set_stashed(true);
+                            info!("Successfully stashed track {} ({:.1} MB)", track.id, file_size as f64 / 1_048_576.0);
+                        }
+                        _ => {
+                            warn!("ffmpeg stash copy failed for track {}, falling back to direct stream fetch", track.id);
+                            if let Ok(resp) = reqwest::get(&stream_url).await {
+                                if let Ok(bytes) = resp.bytes().await {
+                                    if std::fs::write(&dest_file, &bytes).is_ok() {
+                                        let file_size = bytes.len() as u64;
+                                        let _ = s.db.save_stashed_track(&track, dest_file.to_str().unwrap_or(""), file_size);
+                                        w.player_bar().set_stashed(true);
+                                        w.track_detail_view.set_stashed(true);
+                                        info!("Direct stash succeeded for track {} ({:.1} MB)", track.id, file_size as f64 / 1_048_576.0);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Could not get stream URL to stash track {}: {}", track.id, e);
+                }
+            }
         }
     });
 }

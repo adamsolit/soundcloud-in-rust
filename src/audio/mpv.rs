@@ -19,6 +19,7 @@ pub struct MpvDriver {
     is_playing: Arc<AtomicBool>,
     is_paused: Arc<AtomicBool>,
     has_file: Arc<AtomicBool>,
+    speed: Arc<AtomicU64>,
     eof_cb: Arc<Mutex<Option<EofCallback>>>,
 }
 
@@ -99,6 +100,7 @@ impl MpvDriver {
         let is_playing = Arc::new(AtomicBool::new(false));
         let is_paused = Arc::new(AtomicBool::new(false));
         let has_file = Arc::new(AtomicBool::new(false));
+        let speed = Arc::new(AtomicU64::new(1000));
         let eof_cb: Arc<Mutex<Option<EofCallback>>> = Arc::new(Mutex::new(None));
 
         let pos_arc = Arc::clone(&position_ms);
@@ -199,6 +201,7 @@ impl MpvDriver {
             is_playing,
             is_paused,
             has_file,
+            speed,
             eof_cb,
         };
 
@@ -313,6 +316,20 @@ impl MpvDriver {
         })
         .to_string();
         let _ = self.send_command(&cmd);
+    }
+
+    pub fn set_speed(&self, speed: f64) {
+        let clamped = speed.clamp(0.25, 4.0);
+        let cmd = serde_json::json!({
+            "command": ["set_property", "speed", clamped]
+        })
+        .to_string();
+        let _ = self.send_command(&cmd);
+        self.speed.store((clamped * 1000.0) as u64, Ordering::Relaxed);
+    }
+
+    pub fn get_speed(&self) -> f64 {
+        self.speed.load(Ordering::Relaxed) as f64 / 1000.0
     }
 
     pub fn set_audio_normalization(&self, enabled: bool) {
