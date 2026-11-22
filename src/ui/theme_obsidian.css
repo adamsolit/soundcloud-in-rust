@@ -1,0 +1,611 @@
+/* CloudPulse - Clean Minimalist Native Linux Desktop Styling */
+
+/* ==========================================================================
+   Typography Hierarchy: Unified Clean Modern Geometric Sans
+   Bilingual support: Adwaita Sans / Inter / Noto Sans / Noto Sans Arabic
+   ========================================================================== */
+
+* {
+    font-family: 'Adwaita Sans', 'Inter', 'Noto Sans', 'Noto Sans Arabic', system-ui, -apple-system, sans-serif;
+    -gtk-icon-style: symbolic;
+}
+
+window,
+widget,
+label,
+button,
+entry,
+textview,
+headerbar,
+popover,
+scrolledwindow,
+stack {
+    font-family: 'Adwaita Sans', 'Inter', 'Noto Sans', 'Noto Sans Arabic', system-ui, -apple-system, sans-serif;
+}
+
+/* Base Window Surface */
+window.cloudpulse-main-window {
+    background-color: #0a0b0d;
+    color: #f5f5f7;
+}
+
+/* HeaderBar Integration */
+headerbar {
+    background-color: #0a0b0d;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: none;
+    padding: 0 10px;
+    min-height: 46px;
+}
+
+headerbar windowhandle {
+    background: transparent;
+}
+
+headerbar .title {
+    font-weight: 600;
+    font-size: 0.90rem;
+    color: #d1d1d6;
+    letter-spacing: -0.2px;
+}
+
+/* Header Profile Button & Avatar */
+.header-profile-btn {
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+    margin-left: 4px;
+    transition: background-color 120ms ease;
+}
+
+.header-profile-btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.header-profile-btn:active {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+.header-profile-avatar {
+    border-radius: 50%;
+    background-color: #18191f;
+    border: 1.5px solid rgba(255, 255, 255, 0.14);
+}
+
+/* Scrolled Viewport Transparency */
+scrolledwindow {
+    background-color: transparent;
+}
+
+scrolledwindow viewport {
+    background-color: transparent;
+}
+
+/* Minimalist Native GTK4 Scrollbars */
+scrollbar {
+    background-color: transparent;
+    border: none;
+}
+
+scrollbar.vertical {
+    min-width: 6px;
+    margin-right: 2px;
+}
+
+scrollbar.horizontal {
+    min-height: 6px;
+}
+
+scrollbar slider {
+    min-width: 6px;
+    min-height: 6px;
+    border-radius: 9999px;
+    background-color: rgba(255, 255, 255, 0.15);
+    border: none;
+    margin: 2px;
+    transition: background-color 150ms ease;
+}
+
+scrollbar slider:hover {
+    background-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Sidebar Navigation */
+.sidebar-panel {
+    background-color: #0e0f13;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 14px 8px;
+    min-width: 158px;
+    transition: all 140ms ease;
+}
+
+.sidebar-panel.collapsed {
+    padding: 14px 6px;
+    min-width: 54px;
+}
+
+.brand-label {
+    font-weight: 700;
+    font-size: 1.25rem;
+    color: #ffffff;
+    letter-spacing: -0.3px;
+}
+
+.sidebar-panel .brand-label {
+    font-size: 1.05rem;
+    letter-spacing: -0.2px;
+}
+
+.brand-accent {
+    color: #ffffff;
+}
+
+.btn-sidebar-toggle {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 2px;
+    color: #8e8e93;
+    transition: background-color 100ms ease, color 100ms ease;
+}
+
+.btn-sidebar-toggle:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+.nav-button {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: #8e8e93;
+    font-weight: 500;
+    font-size: 0.86rem;
+    transition: all 120ms ease;
+}
+
+.sidebar-panel.collapsed .nav-button {
+    padding: 8px 0;
+}
+
+.nav-button:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+}
+
+.nav-button.active {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    font-weight: 600;
+}
+
+/* Sidebar User Pill */
+.sidebar-user-pill {
+    background-color: rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    transition: all 140ms ease;
+}
+
+.sidebar-user-pill:hover {
+    background-color: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.badge-connected {
+    color: #ffffff;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.badge-guest {
+    color: #7c7c84;
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+/* Mini Player Floating Obsidian Widget */
+window.mini-player-window {
+    background-color: #0d0e12;
+    color: #f5f5f7;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+}
+
+.mini-player-card {
+    background-color: #0d0e12;
+}
+
+.mini-player-artwork {
+    border-radius: 8px;
+    background-color: #1a1c22;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mini-player-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.mini-player-artist {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #8e8e93;
+}
+
+.mini-player-time {
+    font-size: 0.70rem;
+    font-weight: 500;
+    color: #636366;
+    font-feature-settings: "tnum";
+}
+
+/* Bottom Persistent Player Bar */
+.player-bar {
+    background-color: #0e0f13;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 10px 22px 14px 22px;
+    min-height: 84px;
+}
+
+.player-artwork {
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.artist-avatar {
+    border-radius: 50%;
+    background-color: #18191f;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(255, 255, 255, 0.10);
+}
+
+.player-title {
+    font-weight: 600;
+    font-size: 0.90rem;
+    color: #ffffff;
+    line-height: 1.25;
+    letter-spacing: -0.15px;
+}
+
+.player-artist {
+    font-size: 0.80rem;
+    font-weight: 400;
+    color: #8e8e93;
+}
+
+/* Transport Controls */
+.btn-transport-play {
+    background: #ffffff;
+    color: #0a0b0d;
+    border-radius: 50%;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+    border: none;
+    box-shadow: 0 2px 10px rgba(255, 255, 255, 0.18);
+    transition: transform 100ms ease, background 100ms ease;
+}
+
+.btn-transport-play:hover {
+    background: #ececed;
+    transform: scale(1.04);
+}
+
+.btn-transport-play:active {
+    background: #d4d4d8;
+    transform: scale(0.96);
+}
+
+.btn-pill-play {
+    background: #ffffff;
+    color: #0a0b0d;
+    border-radius: 9999px;
+    padding: 8px 18px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border: none;
+    box-shadow: 0 2px 10px rgba(255, 255, 255, 0.16);
+    transition: transform 100ms ease, background 100ms ease;
+}
+
+.btn-pill-play:hover {
+    background: #ececed;
+    transform: translateY(-1px);
+}
+
+.btn-pill-play:active {
+    background: #d4d4d8;
+    transform: translateY(0);
+}
+
+.btn-transport {
+    background: transparent;
+    border: none;
+    color: #8e8e93;
+    border-radius: 50%;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+    transition: color 120ms ease, background 120ms ease;
+}
+
+.btn-transport:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.btn-transport.active {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.btn-heart-liked {
+    color: #ffffff;
+}
+
+.btn-card-like {
+    color: rgba(255, 255, 255, 0.35);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 2px 4px;
+    min-width: 26px;
+    min-height: 26px;
+    transition: all 120ms ease;
+}
+
+.btn-card-like:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.btn-card-like.btn-heart-liked {
+    color: #ffffff;
+}
+
+/* Time labels: Monospace Tabular Alignment to Eliminate Jitter */
+.time-label {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: #7c7c82;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+}
+
+/* Track Cards */
+.track-card {
+    background-color: #121316;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 12px 16px;
+    transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.track-card:hover {
+    background-color: #17181d;
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.40);
+}
+
+.track-card-artwork {
+    border-radius: 7px;
+    background-color: #18191f;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.card-play-btn {
+    background: #ffffff;
+    color: #0a0b0d;
+    border-radius: 50%;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.65);
+}
+
+.card-play-btn:hover {
+    background: #ececed;
+}
+
+.track-card-title {
+    font-weight: 600;
+    font-size: 0.90rem;
+    color: #ffffff;
+    line-height: 1.25;
+    letter-spacing: -0.1px;
+}
+
+.track-card-artist {
+    font-size: 0.82rem;
+    font-weight: 400;
+    color: #8c8c93;
+}
+
+.track-card-stats {
+    font-size: 0.74rem;
+    font-weight: 400;
+    color: #626268;
+}
+
+/* Filter Chips & Genre Pills: Precision Modern Capsules */
+.filter-chip {
+    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 9999px;
+    padding: 6px 14px;
+    color: #94949b;
+    font-size: 0.80rem;
+    font-weight: 500;
+    transition: all 120ms ease;
+}
+
+.filter-chip:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+}
+
+.filter-chip.active {
+    background-color: #ffffff;
+    border-color: #ffffff;
+    color: #0a0b0d;
+    font-weight: 600;
+    box-shadow: 0 2px 10px rgba(255, 255, 255, 0.16);
+}
+
+/* Search Entry */
+.sc-search-entry {
+    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+    padding: 9px 16px;
+    color: #ffffff;
+    font-size: 0.88rem;
+    font-weight: 400;
+    transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.sc-search-entry:focus-within {
+    background-color: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.35);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.20);
+}
+
+/* Waveform Canvas */
+.waveform-canvas {
+    border-radius: 4px;
+    min-height: 40px;
+}
+
+/* Large Waveform Canvas (Track Detail) */
+.waveform-canvas-hero {
+    border-radius: 6px;
+    min-height: 100px;
+}
+
+/* Comment Bubble Marker on Timeline */
+.comment-marker {
+    background-color: #ffffff;
+    border-radius: 50%;
+    min-width: 5px;
+    min-height: 5px;
+}
+
+/* Upload Dropzone */
+.upload-dropzone {
+    border: 1.5px dashed rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.02);
+    padding: 40px 20px;
+    transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.upload-dropzone:hover {
+    border-color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Volume Slider */
+scale.volume-scale trough {
+    min-height: 4px;
+    border-radius: 2px;
+    background-color: rgba(255, 255, 255, 0.12);
+    border: none;
+}
+
+scale.volume-scale highlight {
+    background-color: #ffffff;
+    border-radius: 2px;
+}
+
+scale.volume-scale slider {
+    background-color: #ffffff;
+    border: none;
+    min-width: 12px;
+    min-height: 12px;
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    margin: -4px;
+    transition: box-shadow 120ms ease;
+}
+
+scale.volume-scale slider:hover {
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+}
+
+/* Account and Settings Panels */
+.account-card {
+    background-color: #121316;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 18px 20px;
+}
+
+.login-guide-box {
+    background-color: rgba(255, 255, 255, 0.02);
+    border-left: 2px solid #ffffff;
+    border-radius: 6px;
+    padding: 12px 16px;
+}
+
+/* Header Popover Overlays (Messages & Notifications) */
+popover {
+    background-color: #101115;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.7);
+    padding: 0;
+}
+
+popover > arrow {
+    background-color: #101115;
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+popover contents {
+    background-color: #101115;
+    border-radius: 14px;
+    padding: 8px;
+}
+
+/* Context Menu & Popover Items */
+.context-menu-box {
+    background-color: transparent;
+    padding: 2px;
+}
+
+.context-menu-item {
+    border-radius: 8px;
+    padding: 6px 10px;
+    color: #e5e5ea;
+    font-size: 0.88rem;
+    font-weight: 500;
+    transition: background-color 100ms ease;
+}
+
+.context-menu-item:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+.context-menu-item:active {
+    background-color: rgba(255, 255, 255, 0.14);
+}
+
+/* Queue List Popover styling */
+.queue-row {
+    border-radius: 8px;
+    padding: 4px 6px;
+    transition: background-color 100ms ease;
+}
+
+.queue-row:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+}

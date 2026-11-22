@@ -40,10 +40,14 @@ pub struct SettingsView {
     // Playback & Desktop Preferences
     switch_normalization: gtk::Switch,
     switch_notifications: gtk::Switch,
+    // Theme selection buttons
+    btn_theme_anthropic: gtk::Button,
+    btn_theme_obsidian: gtk::Button,
     // Status
     status_label: gtk::Label,
     spinner: gtk::Spinner,
     // Callbacks
+    on_theme_changed: Rc<RefCell<Option<Box<dyn Fn(crate::ui::theme::AppTheme)>>>>,
     on_connect_token: Rc<RefCell<Option<Box<dyn Fn(String)>>>>,
     on_auto_detect_cookie: Rc<RefCell<Option<Box<dyn Fn()>>>>,
     on_sign_out: Rc<RefCell<Option<Box<dyn Fn()>>>>,
@@ -496,6 +500,77 @@ impl SettingsView {
         cache_group.append(&btn_clear_cache);
         form_box.append(&cache_group);
 
+        // 3B. AESTHETIC DESIGN & THEME CARD (Anthropic Classical vs Obsidian Dark)
+        let theme_group = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(12)
+            .css_classes(["account-card"])
+            .build();
+
+        let theme_title = gtk::Label::builder()
+            .label("Aesthetic Design & Theme")
+            .css_classes(["player-title"])
+            .halign(gtk::Align::Start)
+            .build();
+
+        let theme_desc = gtk::Label::builder()
+            .label("Choose between the Anthropic Hellenic editorial look (terracotta accents, classical serifs, warm alabaster) or the legacy monochrome dark skin.")
+            .css_classes(["player-artist"])
+            .halign(gtk::Align::Start)
+            .wrap(true)
+            .build();
+
+        let theme_btn_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(10)
+            .build();
+
+        let btn_theme_anthropic = gtk::Button::builder()
+            .label("Anthropic Classical (Hellenic Editorial)")
+            .css_classes(["filter-chip", "active"])
+            .build();
+
+        let btn_theme_obsidian = gtk::Button::builder()
+            .label("Obsidian Dark (Legacy Monochrome)")
+            .css_classes(["filter-chip"])
+            .build();
+
+        theme_btn_box.append(&btn_theme_anthropic);
+        theme_btn_box.append(&btn_theme_obsidian);
+
+        theme_group.append(&theme_title);
+        theme_group.append(&theme_desc);
+        theme_group.append(&theme_btn_box);
+        form_box.append(&theme_group);
+
+        let on_theme_changed: Rc<RefCell<Option<Box<dyn Fn(crate::ui::theme::AppTheme)>>>> = Rc::new(RefCell::new(None));
+
+        {
+            let on_c = Rc::clone(&on_theme_changed);
+            let b_ant = btn_theme_anthropic.clone();
+            let b_obs = btn_theme_obsidian.clone();
+            btn_theme_anthropic.connect_clicked(move |_| {
+                b_ant.add_css_class("active");
+                b_obs.remove_css_class("active");
+                if let Some(ref cb) = *on_c.borrow() {
+                    cb(crate::ui::theme::AppTheme::AnthropicClassical);
+                }
+            });
+        }
+
+        {
+            let on_c = Rc::clone(&on_theme_changed);
+            let b_ant = btn_theme_anthropic.clone();
+            let b_obs = btn_theme_obsidian.clone();
+            btn_theme_obsidian.connect_clicked(move |_| {
+                b_obs.add_css_class("active");
+                b_ant.remove_css_class("active");
+                if let Some(ref cb) = *on_c.borrow() {
+                    cb(crate::ui::theme::AppTheme::ObsidianDark);
+                }
+            });
+        }
+
         // 4. AUDIO & DESKTOP PREFERENCES CARD
         let prefs_group = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
@@ -759,8 +834,11 @@ impl SettingsView {
             btn_clear_cache,
             switch_normalization,
             switch_notifications,
+            btn_theme_anthropic,
+            btn_theme_obsidian,
             status_label,
             spinner,
+            on_theme_changed,
             on_connect_token,
             on_auto_detect_cookie,
             on_sign_out,
@@ -880,5 +958,22 @@ impl SettingsView {
 
     pub fn connect_update_profile<F: Fn(String, Option<String>, Option<String>, Option<String>, Option<String>) + 'static>(&self, f: F) {
         *self.on_update_profile.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_theme_changed<F: Fn(crate::ui::theme::AppTheme) + 'static>(&self, f: F) {
+        *self.on_theme_changed.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn set_active_theme(&self, theme: crate::ui::theme::AppTheme) {
+        match theme {
+            crate::ui::theme::AppTheme::AnthropicClassical => {
+                self.btn_theme_anthropic.add_css_class("active");
+                self.btn_theme_obsidian.remove_css_class("active");
+            }
+            crate::ui::theme::AppTheme::ObsidianDark => {
+                self.btn_theme_obsidian.add_css_class("active");
+                self.btn_theme_anthropic.remove_css_class("active");
+            }
+        }
     }
 }

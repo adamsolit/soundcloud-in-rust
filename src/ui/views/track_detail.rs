@@ -695,4 +695,8 @@ impl TrackDetailView {
     pub fn current_track_id(&self) -> Option<u64> {
         self.current_track.borrow().as_ref().map(|t| t.id)
     }
+
+    pub fn waveform(&self) -> &WaveformWidget {
+        &self.waveform
+    }
 }

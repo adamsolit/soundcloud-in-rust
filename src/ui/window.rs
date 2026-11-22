@@ -335,4 +335,10 @@ impl MainWindow {
             self.view_stack.set_visible_child_name("discover");
         }
     }
+
+    pub fn queue_redraw_waveforms(&self) {
+        self.player_bar.waveform().widget().queue_draw();
+        self.track_detail_view.waveform().widget().queue_draw();
+        self.window.queue_draw();
+    }
 }

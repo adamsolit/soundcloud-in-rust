@@ -1,0 +1,687 @@
+/* ==========================================================================
+   CloudPulse — Anthropic Classical (Hellenic Editorial) Theme
+   Aesthetic Philosophy:
+   - Literary, architectural, statuesque Greek proportions & Anthropic restraint
+   - Deep warm basalt stone (#131210) & terracotta sienna (#da7756)
+   - Classical inscriptional capitals (Cinzel) & Venetian editorial serifs (Libron / Arsenica)
+   - Refined hairline borders, warm alabaster cream typography (#f4efe6)
+   ========================================================================== */
+
+* {
+    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', 'Noto Serif Display', 'Noto Serif', 'Adwaita Sans', 'Inter', 'Noto Sans Arabic', serif;
+    -gtk-icon-style: symbolic;
+}
+
+window,
+widget,
+label,
+button,
+entry,
+textview,
+headerbar,
+popover,
+scrolledwindow,
+stack {
+    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', 'Noto Serif Display', 'Noto Serif', 'Adwaita Sans', 'Inter', 'Noto Sans Arabic', serif;
+}
+
+/* ==========================================================================
+   1. Base Window & Structural Containers
+   ========================================================================== */
+
+window.cloudpulse-main-window {
+    background-color: #131210;
+    color: #f4efe6;
+}
+
+/* HeaderBar — Carved Classical Architrave */
+headerbar {
+    background-color: #161412;
+    border-bottom: 1px solid rgba(218, 119, 86, 0.18);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+    padding: 0 14px;
+    min-height: 48px;
+}
+
+headerbar windowhandle {
+    background: transparent;
+}
+
+headerbar .title {
+    font-family: 'Cinzel', 'Noto Serif Display', serif;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: #f4efe6;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+}
+
+/* Header Profile Button & Avatar */
+.header-profile-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    min-width: 34px;
+    min-height: 34px;
+    padding: 0;
+    margin-left: 6px;
+    transition: all 140ms ease;
+}
+
+.header-profile-btn:hover {
+    background-color: rgba(235, 222, 205, 0.08);
+    border-color: rgba(218, 119, 86, 0.35);
+}
+
+.header-profile-btn:active {
+    background-color: rgba(218, 119, 86, 0.20);
+    border-color: #da7756;
+}
+
+.header-profile-avatar {
+    border-radius: 50%;
+    background-color: #1d1b18;
+    border: 1.5px solid rgba(218, 119, 86, 0.35);
+}
+
+/* Viewport Transparency */
+scrolledwindow,
+scrolledwindow viewport {
+    background-color: transparent;
+}
+
+/* Architectural Minimalist Scrollbars */
+scrollbar {
+    background-color: transparent;
+    border: none;
+}
+
+scrollbar.vertical {
+    min-width: 6px;
+    margin-right: 2px;
+}
+
+scrollbar.horizontal {
+    min-height: 6px;
+}
+
+scrollbar slider {
+    min-width: 6px;
+    min-height: 6px;
+    border-radius: 9999px;
+    background-color: rgba(235, 222, 205, 0.14);
+    border: none;
+    margin: 2px;
+    transition: background-color 150ms ease;
+}
+
+scrollbar slider:hover {
+    background-color: rgba(218, 119, 86, 0.50);
+}
+
+/* ==========================================================================
+   2. Sidebar Navigation — Greek Fluted Pillar Structure
+   ========================================================================== */
+
+.sidebar-panel {
+    background-color: #171513;
+    border-right: 1px solid rgba(235, 222, 205, 0.07);
+    padding: 16px 10px;
+    min-width: 164px;
+    transition: all 140ms ease;
+}
+
+.sidebar-panel.collapsed {
+    padding: 16px 6px;
+    min-width: 54px;
+}
+
+.brand-label {
+    font-family: 'Cinzel', 'Noto Serif Display', serif;
+    font-weight: 700;
+    font-size: 1.15rem;
+    color: #f4efe6;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+}
+
+.sidebar-panel .brand-label {
+    font-size: 0.98rem;
+    letter-spacing: 1.5px;
+}
+
+.brand-accent {
+    color: #da7756;
+}
+
+.btn-sidebar-toggle {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 2px;
+    color: #8f8475;
+    transition: all 120ms ease;
+}
+
+.btn-sidebar-toggle:hover {
+    background-color: rgba(235, 222, 205, 0.08);
+    color: #f4efe6;
+}
+
+.nav-button {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #bfae9b;
+    font-family: 'Cinzel', 'Libron', serif;
+    font-weight: 500;
+    font-size: 0.82rem;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    transition: all 140ms ease;
+}
+
+.sidebar-panel.collapsed .nav-button {
+    padding: 8px 0;
+}
+
+.nav-button:hover {
+    background-color: rgba(235, 222, 205, 0.06);
+    color: #f4efe6;
+}
+
+.nav-button.active {
+    background-color: rgba(218, 119, 86, 0.14);
+    color: #f4efe6;
+    font-weight: 600;
+    border-left: 3px solid #da7756;
+    border-radius: 0 8px 8px 0;
+}
+
+/* Sidebar User Status Pill */
+.sidebar-user-pill {
+    background-color: #1e1b18;
+    border-radius: 10px;
+    padding: 9px 12px;
+    border: 1px solid rgba(218, 119, 86, 0.18);
+    transition: all 140ms ease;
+}
+
+.sidebar-user-pill:hover {
+    background-color: #26221e;
+    border-color: rgba(218, 119, 86, 0.35);
+}
+
+.badge-connected {
+    font-family: 'Cinzel', serif;
+    color: #d4a373;
+    font-size: 0.74rem;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+}
+
+.badge-guest {
+    font-family: 'Cinzel', serif;
+    color: #8c8274;
+    font-size: 0.74rem;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* ==========================================================================
+   3. Mini Player Widget — Floating Monolithic Plinth
+   ========================================================================== */
+
+window.mini-player-window {
+    background-color: #161412;
+    color: #f4efe6;
+    border: 1px solid rgba(218, 119, 86, 0.28);
+    border-radius: 14px;
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.85);
+}
+
+.mini-player-card {
+    background-color: #161412;
+}
+
+.mini-player-artwork {
+    border-radius: 8px;
+    background-color: #211e1a;
+    border: 1px solid rgba(235, 222, 205, 0.08);
+}
+
+.mini-player-title {
+    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', serif;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #f4efe6;
+    letter-spacing: 0.2px;
+}
+
+.mini-player-artist {
+    font-family: 'Cinzel', serif;
+    font-size: 0.74rem;
+    font-weight: 500;
+    color: #bfae9b;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+}
+
+.mini-player-time {
+    font-family: 'Cinzel', monospace;
+    font-size: 0.70rem;
+    font-weight: 500;
+    color: #8a8073;
+    font-feature-settings: "tnum";
+}
+
+/* ==========================================================================
+   4. Bottom Persistent Player Bar — Basalt Plinth
+   ========================================================================== */
+
+.player-bar {
+    background-color: #161412;
+    border-top: 1px solid rgba(218, 119, 86, 0.22);
+    box-shadow: 0 -2px 14px rgba(0, 0, 0, 0.4);
+    padding: 10px 24px 14px 24px;
+    min-height: 86px;
+}
+
+.player-artwork {
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(235, 222, 205, 0.09);
+}
+
+.artist-avatar {
+    border-radius: 50%;
+    background-color: #211e1a;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+    border: 2px solid rgba(218, 119, 86, 0.35);
+}
+
+.player-title {
+    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', serif;
+    font-weight: 600;
+    font-size: 0.94rem;
+    color: #f4efe6;
+    line-height: 1.28;
+    letter-spacing: 0.2px;
+}
+
+.player-artist {
+    font-family: 'Cinzel', serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: #bfae9b;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+}
+
+/* Hero Transport Controls */
+.btn-transport-play {
+    background: linear-gradient(135deg, #e07a5f 0%, #c86344 100%);
+    color: #ffffff;
+    border-radius: 50%;
+    min-width: 42px;
+    min-height: 42px;
+    padding: 0;
+    border: none;
+    box-shadow: 0 4px 18px rgba(218, 119, 86, 0.40), 0 1px 3px rgba(0, 0, 0, 0.5);
+    transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.btn-transport-play:hover {
+    background: linear-gradient(135deg, #e7876d 0%, #d46e4f 100%);
+    box-shadow: 0 6px 22px rgba(218, 119, 86, 0.55);
+    transform: scale(1.05);
+}
+
+.btn-transport-play:active {
+    background: linear-gradient(135deg, #be583a 0%, #ac482d 100%);
+    transform: scale(0.96);
+}
+
+.btn-pill-play {
+    background: linear-gradient(135deg, #e07a5f 0%, #c86344 100%);
+    color: #ffffff;
+    font-family: 'Cinzel', serif;
+    letter-spacing: 1.0px;
+    text-transform: uppercase;
+    border-radius: 9999px;
+    padding: 8px 20px;
+    font-weight: 600;
+    font-size: 0.82rem;
+    border: none;
+    box-shadow: 0 3px 14px rgba(218, 119, 86, 0.35);
+    transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.btn-pill-play:hover {
+    background: linear-gradient(135deg, #e7876d 0%, #d46e4f 100%);
+    box-shadow: 0 5px 18px rgba(218, 119, 86, 0.48);
+    transform: translateY(-1px);
+}
+
+.btn-pill-play:active {
+    transform: translateY(0);
+}
+
+.btn-transport {
+    background: transparent;
+    border: none;
+    color: #bfae9b;
+    border-radius: 50%;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+    transition: color 120ms ease, background 120ms ease;
+}
+
+.btn-transport:hover {
+    color: #f4efe6;
+    background: rgba(235, 222, 205, 0.08);
+}
+
+.btn-transport.active {
+    color: #da7756;
+    background: rgba(218, 119, 86, 0.18);
+}
+
+.btn-heart-liked {
+    color: #da7756;
+}
+
+.btn-card-like {
+    color: rgba(235, 222, 205, 0.35);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 2px 4px;
+    min-width: 26px;
+    min-height: 26px;
+    transition: all 120ms ease;
+}
+
+.btn-card-like:hover {
+    color: #da7756;
+    background: rgba(218, 119, 86, 0.12);
+}
+
+.btn-card-like.btn-heart-liked {
+    color: #da7756;
+}
+
+/* Classical Monospace Tabular Time Indicators */
+.time-label {
+    font-family: 'Cinzel', monospace;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: #8c8274;
+    letter-spacing: 0.6px;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   5. Track Cards & Grids — Carved Stone Tablets
+   ========================================================================== */
+
+.track-card {
+    background-color: #1a1815;
+    border-radius: 10px;
+    border: 1px solid rgba(235, 222, 205, 0.07);
+    padding: 12px 16px;
+    transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.track-card:hover {
+    background-color: #221f1b;
+    border-color: rgba(218, 119, 86, 0.30);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.50);
+    transform: translateY(-1px);
+}
+
+.track-card-artwork {
+    border-radius: 7px;
+    background-color: #211e1a;
+    border: 1px solid rgba(235, 222, 205, 0.08);
+}
+
+.card-play-btn {
+    background: linear-gradient(135deg, #e07a5f 0%, #c86344 100%);
+    color: #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 4px 16px rgba(218, 119, 86, 0.50);
+}
+
+.card-play-btn:hover {
+    background: linear-gradient(135deg, #e7876d 0%, #d46e4f 100%);
+}
+
+.track-card-title {
+    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', serif;
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: #f4efe6;
+    line-height: 1.28;
+    letter-spacing: 0.15px;
+}
+
+.track-card-artist {
+    font-family: 'Cinzel', serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: #bfae9b;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+}
+
+.track-card-stats {
+    font-family: 'Cinzel', monospace;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: #8c8274;
+    letter-spacing: 0.5px;
+}
+
+/* ==========================================================================
+   6. Architectural Filter Chips & Genre Tablets
+   ========================================================================== */
+
+.filter-chip {
+    font-family: 'Cinzel', serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 1.1px;
+    text-transform: uppercase;
+    background-color: #1e1b18;
+    border: 1px solid rgba(235, 222, 205, 0.09);
+    border-radius: 8px;
+    padding: 7px 16px;
+    color: #bfae9b;
+    transition: all 140ms ease;
+}
+
+.filter-chip:hover {
+    background-color: #26221e;
+    border-color: rgba(218, 119, 86, 0.35);
+    color: #f4efe6;
+}
+
+.filter-chip.active {
+    background: linear-gradient(135deg, #e07a5f 0%, #c86344 100%);
+    border-color: #da7756;
+    color: #ffffff;
+    font-weight: 700;
+    box-shadow: 0 3px 14px rgba(218, 119, 86, 0.40);
+}
+
+/* ==========================================================================
+   7. Editorial Search Input
+   ========================================================================== */
+
+.sc-search-entry {
+    background-color: #1a1815;
+    border: 1px solid rgba(235, 222, 205, 0.10);
+    border-radius: 10px;
+    padding: 9px 16px;
+    color: #f4efe6;
+    font-family: 'Libron', 'Adwaita Sans', serif;
+    font-size: 0.88rem;
+    transition: all 140ms ease;
+}
+
+.sc-search-entry:focus-within {
+    background-color: #201d19;
+    border-color: #da7756;
+    box-shadow: 0 0 0 1px rgba(218, 119, 86, 0.35), 0 4px 18px rgba(0, 0, 0, 0.40);
+}
+
+/* ==========================================================================
+   8. Waveform Canvas Containers
+   ========================================================================== */
+
+.waveform-canvas {
+    border-radius: 6px;
+    min-height: 40px;
+}
+
+.waveform-canvas-hero {
+    border-radius: 8px;
+    min-height: 100px;
+}
+
+.comment-marker {
+    background-color: #d4a373;
+    border-radius: 50%;
+    min-width: 5px;
+    min-height: 5px;
+}
+
+/* Upload Dropzone */
+.upload-dropzone {
+    border: 1.5px dashed rgba(218, 119, 86, 0.30);
+    border-radius: 14px;
+    background-color: rgba(218, 119, 86, 0.03);
+    padding: 44px 24px;
+    transition: all 140ms ease;
+}
+
+.upload-dropzone:hover {
+    border-color: #da7756;
+    background-color: rgba(218, 119, 86, 0.07);
+}
+
+/* ==========================================================================
+   9. Scales & Sliders (Volume / Track Progression)
+   ========================================================================== */
+
+scale.volume-scale trough {
+    min-height: 4px;
+    border-radius: 2px;
+    background-color: #272420;
+    border: none;
+}
+
+scale.volume-scale highlight {
+    background-color: #da7756;
+    border-radius: 2px;
+}
+
+scale.volume-scale slider {
+    background-color: #f4efe6;
+    border: 1.5px solid #da7756;
+    min-width: 12px;
+    min-height: 12px;
+    border-radius: 50%;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
+    margin: -4px;
+    transition: all 120ms ease;
+}
+
+scale.volume-scale slider:hover {
+    box-shadow: 0 0 10px rgba(218, 119, 86, 0.60);
+    transform: scale(1.15);
+}
+
+/* ==========================================================================
+   10. Settings & Account Cards — Honed Classical Slabs
+   ========================================================================== */
+
+.account-card {
+    background-color: #1a1815;
+    border-radius: 12px;
+    border: 1px solid rgba(235, 222, 205, 0.08);
+    padding: 20px 22px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.login-guide-box {
+    background-color: rgba(218, 119, 86, 0.06);
+    border-left: 3px solid #da7756;
+    border-radius: 6px;
+    padding: 14px 18px;
+}
+
+/* ==========================================================================
+   11. Overlays, Context Menus & Popovers
+   ========================================================================== */
+
+popover {
+    background-color: #1a1714;
+    border: 1px solid rgba(218, 119, 86, 0.28);
+    border-radius: 12px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85);
+    padding: 0;
+}
+
+popover > arrow {
+    background-color: #1a1714;
+    border-color: rgba(218, 119, 86, 0.28);
+}
+
+popover contents {
+    background-color: #1a1714;
+    border-radius: 12px;
+    padding: 8px;
+}
+
+.context-menu-box {
+    background-color: transparent;
+    padding: 2px;
+}
+
+.context-menu-item {
+    border-radius: 7px;
+    padding: 7px 12px;
+    color: #f4efe6;
+    font-family: 'Libron', 'Adwaita Sans', serif;
+    font-size: 0.88rem;
+    font-weight: 500;
+    transition: all 120ms ease;
+}
+
+.context-menu-item:hover {
+    background-color: rgba(218, 119, 86, 0.18);
+    color: #f4efe6;
+}
+
+.context-menu-item:active {
+    background-color: rgba(218, 119, 86, 0.28);
+}
+
+.queue-row {
+    border-radius: 8px;
+    padding: 5px 8px;
+    transition: background-color 100ms ease;
+}
+
+.queue-row:hover {
+    background-color: rgba(235, 222, 205, 0.06);
+}

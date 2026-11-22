@@ -4,6 +4,56 @@ use std::cell::RefCell;
 use std::f64::consts::PI;
 use std::rc::Rc;
 
+use crate::ui::theme::{current_theme, AppTheme};
+
+struct WaveformThemeColors {
+    played: (f64, f64, f64),
+    hover: (f64, f64, f64, f64),
+    unplayed: (f64, f64, f64, f64),
+    refl_played: (f64, f64, f64, f64),
+    refl_unplayed: (f64, f64, f64, f64),
+    comment: (f64, f64, f64),
+    bookmark: (f64, f64, f64),
+    bookmark_hairline: (f64, f64, f64, f64),
+    hover_line: (f64, f64, f64, f64),
+    pill_bg: (f64, f64, f64, f64),
+    pill_border: (f64, f64, f64, f64),
+    pill_text: (f64, f64, f64),
+}
+
+fn get_waveform_colors() -> WaveformThemeColors {
+    match current_theme() {
+        AppTheme::AnthropicClassical => WaveformThemeColors {
+            played: (0.855, 0.467, 0.337), // Terracotta #da7756
+            hover: (0.902, 0.529, 0.404, 0.65), // Warm Terracotta tint #e7876d
+            unplayed: (0.957, 0.937, 0.902, 0.18), // Warm Alabaster #f4efe6
+            refl_played: (0.855, 0.467, 0.337, 0.35),
+            refl_unplayed: (0.957, 0.937, 0.902, 0.07),
+            comment: (0.831, 0.639, 0.451), // Laurel Bronze / Gold #d4a373
+            bookmark: (0.831, 0.639, 0.451), // Laurel Bronze #d4a373
+            bookmark_hairline: (0.831, 0.639, 0.451, 0.45),
+            hover_line: (0.957, 0.937, 0.902, 0.85),
+            pill_bg: (0.102, 0.090, 0.078, 0.96), // Warm Basalt #1a1714
+            pill_border: (0.855, 0.467, 0.337, 0.50), // Terracotta hairline
+            pill_text: (0.957, 0.937, 0.902), // Alabaster #f4efe6
+        },
+        AppTheme::ObsidianDark => WaveformThemeColors {
+            played: (1.0, 1.0, 1.0),
+            hover: (1.0, 1.0, 1.0, 0.55),
+            unplayed: (1.0, 1.0, 1.0, 0.18),
+            refl_played: (1.0, 1.0, 1.0, 0.32),
+            refl_unplayed: (1.0, 1.0, 1.0, 0.07),
+            comment: (1.0, 1.0, 1.0),
+            bookmark: (0.35, 0.70, 1.0),
+            bookmark_hairline: (0.35, 0.70, 1.0, 0.45),
+            hover_line: (1.0, 1.0, 1.0, 0.85),
+            pill_bg: (0.06, 0.07, 0.09, 0.94),
+            pill_border: (1.0, 1.0, 1.0, 0.28),
+            pill_text: (1.0, 1.0, 1.0),
+        },
+    }
+}
+
 pub struct WaveformWidget {
     drawing_area: gtk::DrawingArea,
     samples: Rc<RefCell<Vec<f32>>>,
@@ -82,10 +132,11 @@ impl WaveformWidget {
             }
 
             let baseline_y = h * 0.72; // Signature soundcloud upper/lower ratio
+            let colors = get_waveform_colors();
 
             // Draw bars using batched Cairo paths to eliminate GPU pipeline stalls
-            // Pass 1: Upper played bars (#FFFFFF)
-            cr.set_source_rgb(1.0, 1.0, 1.0);
+            // Pass 1: Upper played bars
+            cr.set_source_rgb(colors.played.0, colors.played.1, colors.played.2);
             for (i, &val) in bar_values.iter().enumerate() {
                 let bar_x = i as f64 * bar_step;
                 let bar_pct = (bar_x + bar_width * 0.5) / w;
@@ -99,7 +150,7 @@ impl WaveformWidget {
             // Pass 2: Upper hover scrubber preview (if any)
             if let Some(hov) = current_hover {
                 if hov > current_prog {
-                    cr.set_source_rgba(1.0, 1.0, 1.0, 0.55);
+                    cr.set_source_rgba(colors.hover.0, colors.hover.1, colors.hover.2, colors.hover.3);
                     for (i, &val) in bar_values.iter().enumerate() {
                         let bar_x = i as f64 * bar_step;
                         let bar_pct = (bar_x + bar_width * 0.5) / w;
@@ -112,7 +163,7 @@ impl WaveformWidget {
                 }
 
                 // Unplayed bars beyond hover
-                cr.set_source_rgba(1.0, 1.0, 1.0, 0.18);
+                cr.set_source_rgba(colors.unplayed.0, colors.unplayed.1, colors.unplayed.2, colors.unplayed.3);
                 for (i, &val) in bar_values.iter().enumerate() {
                     let bar_x = i as f64 * bar_step;
                     let bar_pct = (bar_x + bar_width * 0.5) / w;
@@ -124,7 +175,7 @@ impl WaveformWidget {
                 let _ = cr.fill();
             } else {
                 // Pass 2b: Upper unplayed bars
-                cr.set_source_rgba(1.0, 1.0, 1.0, 0.18);
+                cr.set_source_rgba(colors.unplayed.0, colors.unplayed.1, colors.unplayed.2, colors.unplayed.3);
                 for (i, &val) in bar_values.iter().enumerate() {
                     let bar_x = i as f64 * bar_step;
                     let bar_pct = (bar_x + bar_width * 0.5) / w;
@@ -137,7 +188,7 @@ impl WaveformWidget {
             }
 
             // Pass 3: Lower reflection bars (played)
-            cr.set_source_rgba(1.0, 1.0, 1.0, 0.32);
+            cr.set_source_rgba(colors.refl_played.0, colors.refl_played.1, colors.refl_played.2, colors.refl_played.3);
             for (i, &val) in bar_values.iter().enumerate() {
                 let bar_x = i as f64 * bar_step;
                 let bar_pct = (bar_x + bar_width * 0.5) / w;
@@ -150,7 +201,7 @@ impl WaveformWidget {
             let _ = cr.fill();
 
             // Pass 4: Lower reflection bars (unplayed)
-            cr.set_source_rgba(1.0, 1.0, 1.0, 0.07);
+            cr.set_source_rgba(colors.refl_unplayed.0, colors.refl_unplayed.1, colors.refl_unplayed.2, colors.refl_unplayed.3);
             for (i, &val) in bar_values.iter().enumerate() {
                 let bar_x = i as f64 * bar_step;
                 let bar_pct = (bar_x + bar_width * 0.5) / w;
@@ -165,17 +216,17 @@ impl WaveformWidget {
             // Draw comment markers along timeline
             for (comment_pct, _text) in comments.iter() {
                 let marker_x = comment_pct * w;
-                cr.set_source_rgb(1.0, 1.0, 1.0);
+                cr.set_source_rgb(colors.comment.0, colors.comment.1, colors.comment.2);
                 cr.arc(marker_x, h - 3.5, 2.5, 0.0, 2.0 * PI);
                 let _ = cr.fill();
             }
 
             let bookmarks = bookmarks_clone.borrow();
-            // Draw personal bookmark markers (cyan diamond + subtle vertical hairline)
+            // Draw personal bookmark markers
             for (bm_pct, _note, _id) in bookmarks.iter() {
                 let bm_x = bm_pct * w;
                 // Diamond top flag
-                cr.set_source_rgb(0.35, 0.70, 1.0);
+                cr.set_source_rgb(colors.bookmark.0, colors.bookmark.1, colors.bookmark.2);
                 cr.move_to(bm_x, 1.0);
                 cr.line_to(bm_x + 3.0, 4.5);
                 cr.line_to(bm_x, 8.0);
@@ -184,7 +235,7 @@ impl WaveformWidget {
                 let _ = cr.fill();
 
                 // Subtle hairline down the waveform
-                cr.set_source_rgba(0.35, 0.70, 1.0, 0.45);
+                cr.set_source_rgba(colors.bookmark_hairline.0, colors.bookmark_hairline.1, colors.bookmark_hairline.2, colors.bookmark_hairline.3);
                 cr.set_line_width(0.75);
                 cr.move_to(bm_x, 8.0);
                 cr.line_to(bm_x, h - 2.0);
@@ -194,7 +245,7 @@ impl WaveformWidget {
             // Draw hover scrub indicator line and time indicator pill
             if let Some(hov) = current_hover {
                 let hov_x = hov * w;
-                cr.set_source_rgba(1.0, 1.0, 1.0, 0.85);
+                cr.set_source_rgba(colors.hover_line.0, colors.hover_line.1, colors.hover_line.2, colors.hover_line.3);
                 cr.set_line_width(1.0);
                 cr.move_to(hov_x, 0.0);
                 cr.line_to(hov_x, h);
@@ -222,7 +273,7 @@ impl WaveformWidget {
                     }
 
                     cr.set_font_size(9.0);
-                    cr.select_font_face("monospace", gtk::cairo::FontSlant::Normal, gtk::cairo::FontWeight::Bold);
+                    cr.select_font_face("Cinzel", gtk::cairo::FontSlant::Normal, gtk::cairo::FontWeight::Bold);
                     if let Ok(ext) = cr.text_extents(&time_str) {
                         let pill_w = ext.width() + 10.0;
                         let pill_h = ext.height() + 5.0;
@@ -230,18 +281,18 @@ impl WaveformWidget {
                         let pill_y = 1.0;
 
                         // Pill background
-                        cr.set_source_rgba(0.06, 0.07, 0.09, 0.94);
+                        cr.set_source_rgba(colors.pill_bg.0, colors.pill_bg.1, colors.pill_bg.2, colors.pill_bg.3);
                         cr.rectangle(pill_x, pill_y, pill_w, pill_h);
                         let _ = cr.fill();
 
                         // Pill crisp 1px border
-                        cr.set_source_rgba(1.0, 1.0, 1.0, 0.28);
+                        cr.set_source_rgba(colors.pill_border.0, colors.pill_border.1, colors.pill_border.2, colors.pill_border.3);
                         cr.set_line_width(0.75);
                         cr.rectangle(pill_x, pill_y, pill_w, pill_h);
                         let _ = cr.stroke();
 
                         // Time text
-                        cr.set_source_rgb(1.0, 1.0, 1.0);
+                        cr.set_source_rgb(colors.pill_text.0, colors.pill_text.1, colors.pill_text.2);
                         cr.move_to(pill_x + 5.0, pill_y + pill_h - 2.5);
                         let _ = cr.show_text(&time_str);
                     }

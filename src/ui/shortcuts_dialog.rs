@@ -67,6 +67,16 @@ pub fn show_shortcuts_dialog(parent: &impl IsA<gtk::Window>) {
         .accelerator("<Ctrl>M")
         .build();
 
+    let sc_theme = gtk::ShortcutsShortcut::builder()
+        .title("Toggle Aesthetic Theme (Anthropic Classical / Obsidian)")
+        .accelerator("<Ctrl><Shift>T")
+        .build();
+
+    let sc_close = gtk::ShortcutsShortcut::builder()
+        .title("Dismiss / Go Back to Previous View")
+        .accelerator("<Ctrl>W")
+        .build();
+
     let sc_help = gtk::ShortcutsShortcut::builder()
         .title("Keyboard Shortcuts Cheat Sheet")
         .accelerator("F1")
@@ -80,6 +90,8 @@ pub fn show_shortcuts_dialog(parent: &impl IsA<gtk::Window>) {
     group_nav.append(&sc_search);
     group_nav.append(&sc_sidebar);
     group_nav.append(&sc_mini);
+    group_nav.append(&sc_theme);
+    group_nav.append(&sc_close);
     group_nav.append(&sc_help);
     group_nav.append(&sc_quit);
 

@@ -123,6 +123,23 @@ impl Application {
         app.add_action(&action_mini);
         app.set_accels_for_action("app.toggle-mini", &["<Control>m"]);
 
+        // Register Ctrl+Shift+T to toggle aesthetic theme on the fly
+        let action_toggle_theme = gtk4::gio::SimpleAction::new("toggle-theme", None);
+        let win_theme_act = Rc::clone(&application.window);
+        let state_theme_act = Rc::clone(&application.state);
+        action_toggle_theme.connect_activate(move |_, _| {
+            let next = match crate::ui::theme::current_theme() {
+                crate::ui::theme::AppTheme::AnthropicClassical => crate::ui::theme::AppTheme::ObsidianDark,
+                crate::ui::theme::AppTheme::ObsidianDark => crate::ui::theme::AppTheme::AnthropicClassical,
+            };
+            crate::ui::theme::apply_theme(next);
+            let _ = state_theme_act.db.set_setting("app_theme", next.as_str());
+            win_theme_act.settings_view.set_active_theme(next);
+            win_theme_act.queue_redraw_waveforms();
+        });
+        app.add_action(&action_toggle_theme);
+        app.set_accels_for_action("app.toggle-theme", &["<Control><Shift>t"]);
+
         // Register F1 and Ctrl+? to show shortcuts modal cheat sheet
         let action_shortcuts = gtk4::gio::SimpleAction::new("shortcuts", None);
         let win_shortcuts = Rc::clone(&application.window);
@@ -1762,6 +1779,15 @@ impl Application {
             let _ = db_notif.set_bool_setting("desktop_notifications", enabled);
         });
 
+        // Theme change handler
+        let db_theme = state_c.db.clone();
+        let win_theme_h = Rc::clone(&win_c);
+        self.window.settings_view.connect_theme_changed(move |theme| {
+            crate::ui::theme::apply_theme(theme);
+            let _ = db_theme.set_setting("app_theme", theme.as_str());
+            win_theme_h.queue_redraw_waveforms();
+        });
+
         // 8. Notifications View
         let s_notif = Rc::clone(&state_c);
         let w_notif = Rc::clone(&win_c);
@@ -1880,6 +1906,12 @@ impl Application {
         // Restore desktop notifications setting
         let notif_enabled = self.state.db.get_bool_setting("desktop_notifications", true);
         self.window.settings_view.set_desktop_notifications(notif_enabled);
+
+        // Restore active theme setting (default to Anthropic Classical)
+        let theme_str = self.state.db.get_setting("app_theme").ok().flatten().unwrap_or_else(|| "anthropic".to_string());
+        let initial_theme = crate::ui::theme::AppTheme::from_str(&theme_str);
+        crate::ui::theme::apply_theme(initial_theme);
+        self.window.settings_view.set_active_theme(initial_theme);
 
         let state_c = Rc::clone(&self.state);
         let win_c = Rc::clone(&self.window);
