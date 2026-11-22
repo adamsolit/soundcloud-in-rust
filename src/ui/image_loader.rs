@@ -5,7 +5,16 @@ use gtk::prelude::*;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use tracing::{debug, warn};
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .pool_max_idle_per_host(10)
+        .build()
+        .unwrap_or_default()
+});
 
 const MAX_MEM_TEXTURES: usize = 40;
 
@@ -105,15 +114,10 @@ pub fn load_into_picture(picture: &gtk::Picture, url: Option<&str>) {
     let url_to_fetch = url_key.clone();
 
     glib::spawn_future_local(async move {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-            .unwrap_or_default();
-
-        match client.get(&url_to_fetch).send().await {
+        match HTTP_CLIENT.get(&url_to_fetch).send().await {
             Ok(resp) if resp.status().is_success() => {
                 if let Ok(bytes) = resp.bytes().await {
-                    let _ = std::fs::write(&file_path, &bytes);
+                    let _ = tokio::fs::write(&file_path, &bytes).await;
                     let glib_bytes = glib::Bytes::from_owned(bytes);
                     match gdk::Texture::from_bytes(&glib_bytes) {
                         Ok(texture) => {
@@ -180,15 +184,10 @@ pub fn load_into_image(image: &gtk::Image, url: Option<&str>, fallback_icon: &'s
     let url_to_fetch = url_key.clone();
 
     glib::spawn_future_local(async move {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-            .unwrap_or_default();
-
-        match client.get(&url_to_fetch).send().await {
+        match HTTP_CLIENT.get(&url_to_fetch).send().await {
             Ok(resp) if resp.status().is_success() => {
                 if let Ok(bytes) = resp.bytes().await {
-                    let _ = std::fs::write(&file_path, &bytes);
+                    let _ = tokio::fs::write(&file_path, &bytes).await;
                     let glib_bytes = glib::Bytes::from_owned(bytes);
                     match gdk::Texture::from_bytes(&glib_bytes) {
                         Ok(texture) => {

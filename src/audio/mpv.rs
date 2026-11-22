@@ -25,7 +25,14 @@ pub struct MpvDriver {
 
 impl MpvDriver {
     pub fn new() -> Result<Self> {
-        let sock_path = format!("/tmp/cloudpulse_mpv_{}.sock", std::process::id());
+        let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| std::env::temp_dir());
+        let rand_id = fastrand::u64(..);
+        let sock_path = runtime_dir
+            .join(format!("cloudpulse_mpv_{}_{}.sock", std::process::id(), rand_id))
+            .to_string_lossy()
+            .to_string();
         let _ = std::fs::remove_file(&sock_path);
 
         let mut cmd = Command::new("mpv");

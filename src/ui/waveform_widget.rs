@@ -211,8 +211,8 @@ impl WaveformWidget {
                         let bm_pct: f64 = item.0;
                         let note: &str = item.1.as_str();
                         if f64::abs(hov - bm_pct) < 0.015 {
-                            let clean_note = if note.len() > 18 {
-                                format!("{}...", &note[..18])
+                            let clean_note = if note.chars().count() > 18 {
+                                format!("{}...", note.chars().take(18).collect::<String>())
                             } else {
                                 note.to_string()
                             };

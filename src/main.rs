@@ -70,12 +70,18 @@ fn ensure_desktop_integration() {
     let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else { return; };
     let app_dir = home.join(".local/share/applications");
     let icon_dir = home.join(".local/share/icons/hicolor/scalable/apps");
-    let desktop_file = app_dir.join("soundcloud.desktop");
-    let icon_file = icon_dir.join("soundcloud.svg");
+    let desktop_id_file = app_dir.join(format!("{}.desktop", APP_ID));
+    let desktop_alias_file = app_dir.join("soundcloud.desktop");
+    let icon_id_file = icon_dir.join(format!("{}.svg", APP_ID));
+    let icon_alias_file = icon_dir.join("soundcloud.svg");
 
     let _ = std::fs::create_dir_all(&icon_dir);
-    if !icon_file.exists() {
-        let _ = std::fs::write(&icon_file, include_bytes!("../assets/soundcloud_app_icon.svg"));
+    let icon_bytes = include_bytes!("../assets/soundcloud_app_icon.svg");
+    if !icon_id_file.exists() {
+        let _ = std::fs::write(&icon_id_file, icon_bytes);
+    }
+    if !icon_alias_file.exists() {
+        let _ = std::fs::write(&icon_alias_file, icon_bytes);
     }
 
     if let Some(display) = gdk4::Display::default() {
@@ -83,30 +89,29 @@ fn ensure_desktop_integration() {
         theme.add_search_path(&icon_dir);
     }
 
-    if !desktop_file.exists() {
-        let _ = std::fs::create_dir_all(&app_dir);
-        let current_exe = std::env::current_exe()
-            .unwrap_or_else(|_| std::path::PathBuf::from("soundcloud"));
-        let exe_str = current_exe.to_string_lossy();
+    let _ = std::fs::create_dir_all(&app_dir);
+    let current_exe = std::env::current_exe()
+        .unwrap_or_else(|_| std::path::PathBuf::from("soundcloud"));
+    let exe_str = current_exe.to_string_lossy();
 
-        let desktop_content = format!(
-            "[Desktop Entry]\n\
-             Name=SoundCloud\n\
-             Comment=Native SoundCloud client for Linux & Wayland\n\
-             Exec={}\n\
-             Icon=soundcloud\n\
-             Terminal=false\n\
-             Type=Application\n\
-             Categories=AudioVideo;Audio;Player;\n\
-             Keywords=SoundCloud;Streaming;Audio;Waveform;Player;\n\
-             StartupNotify=true\n\
-             StartupWMClass={}\n",
-            exe_str, APP_ID
-        );
+    let desktop_content = format!(
+        "[Desktop Entry]\n\
+         Name=SoundCloud\n\
+         Comment=Native SoundCloud client for Linux & Wayland\n\
+         Exec={}\n\
+         Icon={}\n\
+         Terminal=false\n\
+         Type=Application\n\
+         Categories=AudioVideo;Audio;Player;\n\
+         Keywords=SoundCloud;Streaming;Audio;Waveform;Player;\n\
+         StartupNotify=true\n\
+         StartupWMClass={}\n",
+        exe_str, APP_ID, APP_ID
+    );
 
-        let _ = std::fs::write(&desktop_file, desktop_content);
-        let _ = std::process::Command::new("update-desktop-database")
-            .arg(&app_dir)
-            .status();
-    }
+    let _ = std::fs::write(&desktop_id_file, &desktop_content);
+    let _ = std::fs::write(&desktop_alias_file, &desktop_content);
+    let _ = std::process::Command::new("update-desktop-database")
+        .arg(&app_dir)
+        .status();
 }

@@ -91,7 +91,16 @@ impl Application {
             std::process::exit(0);
         });
         app.add_action(&action_quit);
-        app.set_accels_for_action("app.quit", &["<Control>q", "<Control>w"]);
+        app.set_accels_for_action("app.quit", &["<Control>q"]);
+
+        // Register Ctrl+W to dismiss active popovers or close subviews (go back)
+        let action_close_view = gtk4::gio::SimpleAction::new("close-view", None);
+        let win_close = Rc::clone(&application.window);
+        action_close_view.connect_activate(move |_, _| {
+            win_close.go_back();
+        });
+        app.add_action(&action_close_view);
+        app.set_accels_for_action("app.close-view", &["<Control>w"]);
 
         // Register Ctrl+B and F9 global accelerators to toggle sidebar
         let action_toggle_sidebar = gtk4::gio::SimpleAction::new("toggle-sidebar", None);
@@ -1648,7 +1657,11 @@ impl Application {
             let w = Rc::clone(&w_auto);
             glib::spawn_future_local(async move {
                 w.settings_view.set_status("Scanning browser profiles for soundcloud.com cookies...", false);
-                if let Some(token) = crate::api::browser_cookies::scan_for_soundcloud_cookie() {
+                let token_opt = tokio::task::spawn_blocking(crate::api::browser_cookies::scan_for_soundcloud_cookie)
+                    .await
+                    .ok()
+                    .flatten();
+                if let Some(token) = token_opt {
                     w.settings_view.set_token_input(&token);
                     w.settings_view.set_status("Found session cookie! Verifying with SoundCloud...", false);
 
