@@ -1,89 +1,134 @@
-# SoundCloud for Linux
+# SoundCloud Desktop Client
 
-A native GTK4 / Libadwaita desktop client for SoundCloud, written in Rust.
+A high-performance, native GTK4 / Libadwaita desktop client for SoundCloud written in Rust.
 
-Modern web browsers and Electron-based wrappers are heavy, sluggish, and lack proper desktop integration. This client is built from scratch as a fast, native Linux application designed for Wayland and X11, featuring direct PipeWire/ALSA playback, interactive Cairo waveform scrubbing, and standard MPRIS media integration.
-
----
-
-## Features
-
-- **Native Linux UI**: Built with GTK4 and Libadwaita. Seamless fractional scaling, smooth scrolling, and a clean monochrome dark theme.
-- **Interactive Waveform**: Custom Cairo-rendered waveform widget with click-to-seek, hover time inspection, and real-time scrubbing at 60 FPS.
-- **Low Resource Usage**: Bounded in-memory texture caching (capped at 40 covers) and demuxer memory caps to maintain a flat RAM footprint (~70–110 MB RSS).
-- **MPV Audio Backend**: Headless MPV background daemon communicating over local UNIX IPC for gapless, hardware-accelerated streaming via PipeWire/PulseAudio.
-- **Desktop Integration**:
-  - Full MPRIS2 D-Bus support (hardware media keys, lock screen playback, `playerctl`, Waybar / Noctalia widgets).
-  - Automatically registers its `.desktop` launcher and vector icon on first launch.
-- **Account & Library Management**:
-  - Creator and artist profiles with track catalogs and follow toggles.
-  - Personal library sync (liked tracks, custom playlists).
-  - Track uploads with metadata and artwork support.
-  - Persistent login via Linux Secret Service keyring (with guest mode fallback).
+Modern web browsers and Electron-based wrappers are heavy, sluggish, and lack proper desktop integration. This client is engineered from scratch as a fast, native multi-platform application designed for Linux (Wayland & X11) and Windows (10 & 11), featuring direct hardware audio playback via MPV, interactive Cairo waveform scrubbing, offline local caching, and deep operating system integration.
 
 ---
 
-## Installation
+## Downloads (Release v0.1.0)
 
-### Arch Linux / CachyOS / Manjaro
+| Platform | Package | Format | Details |
+| :--- | :--- | :--- | :--- |
+| **Linux (x86_64)** | [`soundcloud-v0.1.0-linux-x86_64.tar.gz`](https://github.com/adamsolit/soundcloud-in-rust/releases/download/v0.1.0/soundcloud-v0.1.0-linux-x86_64.tar.gz) | `.tar.gz` | Standalone Linux binary, desktop launcher, icons, and automated installer |
+| **Windows (x86_64)** | [`soundcloud-v0.1.0-windows-x86_64.zip`](https://github.com/adamsolit/soundcloud-in-rust/releases/download/v0.1.0/soundcloud-v0.1.0-windows-x86_64.zip) | `.zip` | Portable package with `soundcloud.exe`, `mpv.exe`, GTK4 runtime DLLs, and `run.bat` |
+| **Windows Executable** | [`soundcloud.exe`](https://github.com/adamsolit/soundcloud-in-rust/releases/download/v0.1.0/soundcloud.exe) | `.exe` | Standalone 64-bit Windows PE binary |
 
-Install system dependencies:
+---
+
+## Core Features
+
+### Swiss Minimalist Monochrome Aesthetic
+- **Restrained Visual Polish**: Obsidian backgrounds (`#0d0d0f`, `#161618`), subtle border dividers (`#262628`), and pure white accents (`#ffffff`).
+- **Precision Typography**: Clean, high-legibility sans-serif typography (Inter, Adwaita Sans, and Noto Sans Arabic) with zero label truncation.
+- **Micro-Interaction Physics**: Cubic-bezier easing curve (`cubic-bezier(0.16, 1, 0.3, 1)`) with tactile card elevation and responsive button feedback.
+- **Collapsible Sidebar**: Instant icon-only sidebar collapse (`Ctrl+B` / `F9`) for focused listening or compact window arrangements.
+
+### Audio Engine & Performance
+- **Headless MPV Integration**: Communicates via local IPC sockets (`$XDG_RUNTIME_DIR` on Linux, Win32 Named Pipes on Windows) for low-latency, gapless, hardware-accelerated streaming.
+- **Native Audio Backends**: Direct PipeWire/ALSA output on Linux; native WASAPI output on Windows.
+- **Minimal Memory Overhead**: Flat memory footprint (~70–110 MB RSS) maintained through bounded texture caching (capped at 40 covers) and demuxer buffering limits.
+
+### Interactive Waveform & Scrubbing
+- **Custom Cairo Engine**: 60 FPS real-time scrubbing, hover time-inspection, and cached sample rendering.
+- **Named Waveform Bookmarks**: Press `b` to prompt a bookmark creation dialog. Save labeled timestamps across any track and hover over the waveform to inspect and jump directly to points of interest.
+
+### Productivity, Offline & Library
+- **Offline Stash**: Download tracks directly for offline playback via the track context menu or player bar. Stashed tracks are indexed locally in SQLite with instant offline seeking.
+- **Streamlined Player Overflow Hub**: A non-intrusive `...` overlay menu housing Sleep Timer (15m, 30m, 45m, 60m, or track end), Playback Speed (0.5x to 2.0x pitch-preserved), Share link copying, and Offline Download toggles.
+- **Session Auto-Detection**: Background zero-lag cookie scanning for active SoundCloud sessions across Firefox, Zen Browser, Google Chrome, Brave, and Microsoft Edge.
+- **Catalog & Account Sync**: Access personal streams, discover algorithmic feeds, manage liked tracks and playlists, search the full catalog, and explore artist profiles.
+
+### Desktop Integration
+- **Linux**: Full MPRIS2 D-Bus integration (hardware media keys, lock screen media controls, `playerctl`, Waybar, and Noctalia widget support).
+- **Windows**: Native taskbar controls, volume management, and portable zero-registry deployment.
+
+---
+
+## Installation & Running
+
+### Windows (10 / 11 64-bit)
+
+1. Download **`soundcloud-v0.1.0-windows-x86_64.zip`** from the [Releases page](https://github.com/adamsolit/soundcloud-in-rust/releases/tag/v0.1.0).
+2. Extract the archive into any folder (e.g. `C:\Program Files\SoundCloud` or your Desktop).
+3. Double-click **`run.bat`** (or `soundcloud.exe`) to launch.
+4. *No installation or external dependencies required.* All GTK4 runtime libraries, GLib schemas, icons, and MPV engines are completely self-contained.
+
+### Linux Pre-built Bundle
+
 ```bash
-sudo pacman -S --needed rust cargo gtk4 libadwaita mpv openssl sqlite
+tar -xzf soundcloud-v0.1.0-linux-x86_64.tar.gz
+cd soundcloud-v0.1.0-linux-x86_64
+./install.sh
 ```
+*(Installs to `~/.local` by default without needing root permissions, or pass `--system` for `/usr/local`)*.
 
-Build and install with `makepkg`:
+### Arch Linux / CachyOS / Manjaro (Source Package)
+
 ```bash
+# Install build dependencies
+sudo pacman -S --needed base-devel git rust cargo gtk4 libadwaita mpv openssl sqlite
+
+# Clone and build package
 git clone https://github.com/adamsolit/soundcloud-in-rust.git
 cd soundcloud-in-rust
 makepkg -si
 ```
 
-### Manual Build (Any Distribution)
+### Manual Compilation from Source
+
+Ensure `rustc` (1.80+), `gtk4`, `libadwaita-1`, and `mpv` development libraries are installed.
 
 ```bash
 git clone https://github.com/adamsolit/soundcloud-in-rust.git
 cd soundcloud-in-rust
+
 cargo build --release
 
-# Install binary to user PATH
-install -Dm755 target/release/cloudpulse ~/.local/bin/soundcloud
-
-# Install desktop launcher and icon
-install -Dm644 soundcloud.desktop ~/.local/share/applications/soundcloud.desktop
-install -Dm644 assets/soundcloud_app_icon.svg ~/.local/share/icons/hicolor/scalable/apps/soundcloud.svg
-update-desktop-database ~/.local/share/applications/
+# The compiled binary will be located at:
+# target/release/cloudpulse
 ```
 
 ---
 
-## Usage
+## Keyboard Shortcuts
 
-Launch SoundCloud from your desktop application launcher (Rofi, Wofi, Noctalia, App Grid) or run:
-```bash
-soundcloud
-```
+| Shortcut | Action |
+| :--- | :--- |
+| `Space` | Play / Pause playback |
+| `Left Arrow` | Seek backward 5 seconds |
+| `Right Arrow` | Seek forward 5 seconds |
+| `Up Arrow` | Increase volume |
+| `Down Arrow` | Decrease volume |
+| `m` | Toggle mute |
+| `b` | Create named bookmark at current timestamp |
+| `Ctrl + B` / `F9` | Toggle sidebar collapse |
+| `Ctrl + Q` | Quit application |
 
 ---
 
-## Technical Stack
+## Technical Architecture
 
-- **GUI**: GTK4 (`gtk4-rs`), Libadwaita (`libadwaita-rs`), Cairo rendering
-- **Audio Engine**: Headless `mpv` process over UNIX domain socket IPC
-- **Async Runtime**: Tokio (tuned 2-worker pool) + Reqwest (HTTP/2 connection pooling)
-- **Database & Cache**: SQLite (WAL mode) for offline cache; Secret Service for credentials
-- **Media Controls**: `mpris-server` over D-Bus (`org.mpris.MediaPlayer2.cloudpulse`)
+```
+soundcloud-in-rust/
+├── src/
+│   ├── main.rs                 # Application entry point, Tokio runtime initialization
+│   ├── app.rs                  # GTK4 / Libadwaita window coordinator & action handlers
+│   ├── api/                    # SoundCloud API client, token handling, cookie scanners
+│   ├── audio/                  # MPV process supervisor, IPC communication, playback events
+│   ├── db/                     # SQLite persistence (history, cached profiles, offline tracks, bookmarks)
+│   ├── models/                 # Track, playlist, user, and comment data models
+│   ├── mpris/                  # Linux MPRIS2 D-Bus interface and Windows stubs
+│   ├── paths.rs                # Cross-platform XDG / Win32 LocalAppData path resolver
+│   └── ui/                     # GTK4 widgets, views, Cairo waveform rendering, theme styles
+├── packaging/
+│   └── windows/                # Windows packaging scripts and CI definitions
+├── assets/                     # Application icons (SVG / ICO)
+└── Cargo.toml                  # Cargo dependencies and workspace configuration
+```
 
 ---
 
 ## License
 
-MIT
-
----
-
-## Acknowledgments
-
-- Built in collaboration with **Antigravity** (Google DeepMind).
-- Audio streaming powered by **MPV** and **PipeWire**.
-- UI components built on the **GNOME** / **Libadwaita** ecosystem.
+This project is licensed under the [MIT License](LICENSE).
