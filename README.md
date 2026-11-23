@@ -1,134 +1,77 @@
 # SoundCloud Desktop Client
 
-A high-performance, native GTK4 / Libadwaita desktop client for SoundCloud written in Rust.
-
-Modern web browsers and Electron-based wrappers are heavy, sluggish, and lack proper desktop integration. This client is engineered from scratch as a fast, native multi-platform application designed for Linux (Wayland & X11) and Windows (10 & 11), featuring direct hardware audio playback via MPV, interactive Cairo waveform scrubbing, offline local caching, and deep operating system integration.
+A native desktop client for SoundCloud, written in Rust with GTK4 and Libadwaita. Available for Linux and Windows.
 
 ---
 
-## Downloads (Release v0.1.0)
+## Downloads (v0.1.0)
 
-| Platform | Package | Format | Details |
-| :--- | :--- | :--- | :--- |
-| **Linux (x86_64)** | [`soundcloud-v0.1.0-linux-x86_64.tar.gz`](https://github.com/adamsolit/soundcloud-in-rust/releases/download/v0.1.0/soundcloud-v0.1.0-linux-x86_64.tar.gz) | `.tar.gz` | Standalone Linux binary, desktop launcher, icons, and automated installer |
-| **Windows (x86_64)** | [`soundcloud-v0.1.0-windows-x86_64.zip`](https://github.com/adamsolit/soundcloud-in-rust/releases/download/v0.1.0/soundcloud-v0.1.0-windows-x86_64.zip) | `.zip` | Portable package with `soundcloud.exe`, `mpv.exe`, GTK4 runtime DLLs, and `run.bat` |
-| **Windows Executable** | [`soundcloud.exe`](https://github.com/adamsolit/soundcloud-in-rust/releases/download/v0.1.0/soundcloud.exe) | `.exe` | Standalone 64-bit Windows PE binary |
-
----
-
-## Core Features
-
-### Swiss Minimalist Monochrome Aesthetic
-- **Restrained Visual Polish**: Obsidian backgrounds (`#0d0d0f`, `#161618`), subtle border dividers (`#262628`), and pure white accents (`#ffffff`).
-- **Precision Typography**: Clean, high-legibility sans-serif typography (Inter, Adwaita Sans, and Noto Sans Arabic) with zero label truncation.
-- **Micro-Interaction Physics**: Cubic-bezier easing curve (`cubic-bezier(0.16, 1, 0.3, 1)`) with tactile card elevation and responsive button feedback.
-- **Collapsible Sidebar**: Instant icon-only sidebar collapse (`Ctrl+B` / `F9`) for focused listening or compact window arrangements.
-
-### Audio Engine & Performance
-- **Headless MPV Integration**: Communicates via local IPC sockets (`$XDG_RUNTIME_DIR` on Linux, Win32 Named Pipes on Windows) for low-latency, gapless, hardware-accelerated streaming.
-- **Native Audio Backends**: Direct PipeWire/ALSA output on Linux; native WASAPI output on Windows.
-- **Minimal Memory Overhead**: Flat memory footprint (~70–110 MB RSS) maintained through bounded texture caching (capped at 40 covers) and demuxer buffering limits.
-
-### Interactive Waveform & Scrubbing
-- **Custom Cairo Engine**: 60 FPS real-time scrubbing, hover time-inspection, and cached sample rendering.
-- **Named Waveform Bookmarks**: Press `b` to prompt a bookmark creation dialog. Save labeled timestamps across any track and hover over the waveform to inspect and jump directly to points of interest.
-
-### Productivity, Offline & Library
-- **Offline Stash**: Download tracks directly for offline playback via the track context menu or player bar. Stashed tracks are indexed locally in SQLite with instant offline seeking.
-- **Streamlined Player Overflow Hub**: A non-intrusive `...` overlay menu housing Sleep Timer (15m, 30m, 45m, 60m, or track end), Playback Speed (0.5x to 2.0x pitch-preserved), Share link copying, and Offline Download toggles.
-- **Session Auto-Detection**: Background zero-lag cookie scanning for active SoundCloud sessions across Firefox, Zen Browser, Google Chrome, Brave, and Microsoft Edge.
-- **Catalog & Account Sync**: Access personal streams, discover algorithmic feeds, manage liked tracks and playlists, search the full catalog, and explore artist profiles.
-
-### Desktop Integration
-- **Linux**: Full MPRIS2 D-Bus integration (hardware media keys, lock screen media controls, `playerctl`, Waybar, and Noctalia widget support).
-- **Windows**: Native taskbar controls, volume management, and portable zero-registry deployment.
+| Platform | Download | Instructions |
+| :--- | :--- | :--- |
+| **Windows** | [`soundcloud-v0.1.0-windows-x86_64.zip`](https://github.com/adamsolit/soundcloud-in-rust/releases/download/v0.1.0/soundcloud-v0.1.0-windows-x86_64.zip) | Extract and run `run.bat` (or `soundcloud.exe`) |
+| **Linux** | [`soundcloud-v0.1.0-linux-x86_64.tar.gz`](https://github.com/adamsolit/soundcloud-in-rust/releases/download/v0.1.0/soundcloud-v0.1.0-linux-x86_64.tar.gz) | Extract and run `./install.sh` |
+| **Windows Exe Only** | [`soundcloud.exe`](https://github.com/adamsolit/soundcloud-in-rust/releases/download/v0.1.0/soundcloud.exe) | Standalone executable |
 
 ---
 
-## Installation & Running
+## Features
 
-### Windows (10 / 11 64-bit)
+- **Fast and lightweight**: Native app with low memory usage (~70-100 MB RAM), built with GTK4 and powered by an MPV audio backend.
+- **Interactive waveform**: Visual waveform for tracks with hover timestamp preview and click-to-seek.
+- **Named bookmarks**: Press `b` while listening to save a named bookmark at the current timestamp, then jump back to it later from the waveform.
+- **Offline downloads**: Download tracks to an "Offline Stash" for playback without an internet connection.
+- **Playback controls**: Speed adjustment (0.5x to 2.0x), sleep timer, and track link sharing tucked into a clean player menu.
+- **Browser session auto-detection**: Automatically imports your logged-in SoundCloud session from Firefox, Zen Browser, Chrome, Brave, or Edge.
+- **Desktop integration**: Media keys, lock screen controls, and system volume support (MPRIS on Linux, native media controls on Windows).
+- **Clean interface**: Dark theme, collapsible sidebar (`Ctrl+B`), and full support for both English and Arabic text without truncation.
 
-1. Download **`soundcloud-v0.1.0-windows-x86_64.zip`** from the [Releases page](https://github.com/adamsolit/soundcloud-in-rust/releases/tag/v0.1.0).
-2. Extract the archive into any folder (e.g. `C:\Program Files\SoundCloud` or your Desktop).
-3. Double-click **`run.bat`** (or `soundcloud.exe`) to launch.
-4. *No installation or external dependencies required.* All GTK4 runtime libraries, GLib schemas, icons, and MPV engines are completely self-contained.
+---
 
-### Linux Pre-built Bundle
+## Installation
 
+### Windows
+1. Download `soundcloud-v0.1.0-windows-x86_64.zip`.
+2. Extract the folder anywhere.
+3. Run `run.bat` (or `soundcloud.exe`). Everything needed is included in the zip.
+
+### Linux (Pre-built)
 ```bash
 tar -xzf soundcloud-v0.1.0-linux-x86_64.tar.gz
 cd soundcloud-v0.1.0-linux-x86_64
 ./install.sh
 ```
-*(Installs to `~/.local` by default without needing root permissions, or pass `--system` for `/usr/local`)*.
+*(Requires `libadwaita` and `mpv` installed on your system)*
 
-### Arch Linux / CachyOS / Manjaro (Source Package)
-
+### Linux (Arch Linux / CachyOS)
 ```bash
-# Install build dependencies
-sudo pacman -S --needed base-devel git rust cargo gtk4 libadwaita mpv openssl sqlite
-
-# Clone and build package
 git clone https://github.com/adamsolit/soundcloud-in-rust.git
 cd soundcloud-in-rust
 makepkg -si
 ```
 
-### Manual Compilation from Source
-
-Ensure `rustc` (1.80+), `gtk4`, `libadwaita-1`, and `mpv` development libraries are installed.
-
+### Build from Source
 ```bash
 git clone https://github.com/adamsolit/soundcloud-in-rust.git
 cd soundcloud-in-rust
-
 cargo build --release
-
-# The compiled binary will be located at:
-# target/release/cloudpulse
 ```
 
 ---
 
-## Keyboard Shortcuts
+## Shortcuts
 
-| Shortcut | Action |
+| Key | Action |
 | :--- | :--- |
-| `Space` | Play / Pause playback |
-| `Left Arrow` | Seek backward 5 seconds |
-| `Right Arrow` | Seek forward 5 seconds |
-| `Up Arrow` | Increase volume |
-| `Down Arrow` | Decrease volume |
-| `m` | Toggle mute |
-| `b` | Create named bookmark at current timestamp |
-| `Ctrl + B` / `F9` | Toggle sidebar collapse |
-| `Ctrl + Q` | Quit application |
-
----
-
-## Technical Architecture
-
-```
-soundcloud-in-rust/
-├── src/
-│   ├── main.rs                 # Application entry point, Tokio runtime initialization
-│   ├── app.rs                  # GTK4 / Libadwaita window coordinator & action handlers
-│   ├── api/                    # SoundCloud API client, token handling, cookie scanners
-│   ├── audio/                  # MPV process supervisor, IPC communication, playback events
-│   ├── db/                     # SQLite persistence (history, cached profiles, offline tracks, bookmarks)
-│   ├── models/                 # Track, playlist, user, and comment data models
-│   ├── mpris/                  # Linux MPRIS2 D-Bus interface and Windows stubs
-│   ├── paths.rs                # Cross-platform XDG / Win32 LocalAppData path resolver
-│   └── ui/                     # GTK4 widgets, views, Cairo waveform rendering, theme styles
-├── packaging/
-│   └── windows/                # Windows packaging scripts and CI definitions
-├── assets/                     # Application icons (SVG / ICO)
-└── Cargo.toml                  # Cargo dependencies and workspace configuration
-```
+| `Space` | Play / Pause |
+| `Left` / `Right` | Seek 5 seconds backward / forward |
+| `Up` / `Down` | Volume up / down |
+| `m` | Mute / Unmute |
+| `b` | Add named bookmark |
+| `Ctrl + B` | Toggle sidebar |
+| `Ctrl + Q` | Quit |
 
 ---
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT
