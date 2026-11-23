@@ -57,13 +57,7 @@ thread_local! {
 }
 
 pub fn get_cache_dir() -> PathBuf {
-    let base = std::env::var("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-            PathBuf::from(home).join(".cache")
-        });
-    let dir = base.join("soundcloud").join("artwork");
+    let dir = crate::paths::cache_dir().join("artwork");
     let _ = std::fs::create_dir_all(&dir);
     dir
 }

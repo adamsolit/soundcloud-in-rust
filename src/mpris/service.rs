@@ -1,9 +1,30 @@
 use anyhow::Result;
+#[cfg(target_os = "linux")]
 use mpris_server::zbus::{self, fdo};
+#[cfg(target_os = "linux")]
 use mpris_server::{
-    LoopStatus, Metadata, PlaybackRate, PlaybackStatus, PlayerInterface, Property,
+    Metadata, PlaybackRate, PlayerInterface, Property,
     RootInterface, Server, Time, TrackId, Volume,
 };
+#[cfg(target_os = "linux")]
+pub use mpris_server::{LoopStatus, PlaybackStatus};
+
+#[cfg(not(target_os = "linux"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaybackStatus {
+    Playing,
+    Paused,
+    Stopped,
+}
+
+#[cfg(not(target_os = "linux"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopStatus {
+    None,
+    Track,
+    Playlist,
+}
+
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::UnboundedSender;
@@ -26,6 +47,7 @@ pub enum MprisCommand {
     SetLoopStatus(LoopStatus),
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Clone)]
 pub struct MprisHandler {
     cmd_tx: UnboundedSender<MprisCommand>,
@@ -37,6 +59,7 @@ pub struct MprisHandler {
     shuffle: Arc<std::sync::atomic::AtomicBool>,
 }
 
+#[cfg(target_os = "linux")]
 impl MprisHandler {
     pub fn new(cmd_tx: UnboundedSender<MprisCommand>) -> Self {
         Self {
@@ -67,6 +90,7 @@ impl MprisHandler {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn build_metadata(track: Option<&Track>) -> Metadata {
     if let Some(t) = track {
         let mut b = Metadata::builder()
@@ -91,6 +115,7 @@ fn build_metadata(track: Option<&Track>) -> Metadata {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl RootInterface for MprisHandler {
     async fn raise(&self) -> fdo::Result<()> {
         Ok(())
@@ -146,6 +171,7 @@ impl RootInterface for MprisHandler {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl PlayerInterface for MprisHandler {
     async fn next(&self) -> fdo::Result<()> {
         let _ = self.cmd_tx.send(MprisCommand::Next);
@@ -277,11 +303,13 @@ impl PlayerInterface for MprisHandler {
     }
 }
 
+#[cfg(target_os = "linux")]
 pub struct MprisService {
     pub handler: MprisHandler,
     server: Option<Server<MprisHandler>>,
 }
 
+#[cfg(target_os = "linux")]
 impl MprisService {
     pub async fn start(cmd_tx: UnboundedSender<MprisCommand>) -> Result<Self> {
         let handler = MprisHandler::new(cmd_tx);
@@ -336,4 +364,24 @@ impl MprisService {
             let _ = server.emit(mpris_server::Signal::Seeked { position: time }).await;
         }
     }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub struct MprisService {}
+
+#[cfg(not(target_os = "linux"))]
+impl MprisService {
+    pub async fn start(_cmd_tx: UnboundedSender<MprisCommand>) -> Result<Self> {
+        Ok(Self {})
+    }
+
+    pub async fn update_metadata(&self, _track: Option<&Track>) {}
+
+    pub async fn update_status(&self, _status: PlaybackStatus) {}
+
+    pub async fn update_shuffle(&self, _shuffle: bool) {}
+
+    pub async fn update_loop_status(&self, _loop_status: LoopStatus) {}
+
+    pub async fn emit_seeked(&self, _pos_us: u64) {}
 }

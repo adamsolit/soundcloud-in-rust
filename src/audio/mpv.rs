@@ -1,19 +1,40 @@
 use anyhow::{bail, Context, Result};
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::UnixStream;
-use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
+#[cfg(unix)]
+pub type IpcStream = std::os::unix::net::UnixStream;
+
+#[cfg(windows)]
+pub type IpcStream = std::fs::File;
+
+fn connect_ipc(sock_path: &str) -> std::io::Result<IpcStream> {
+    #[cfg(unix)]
+    {
+        let stream = std::os::unix::net::UnixStream::connect(sock_path)?;
+        let _ = stream.set_read_timeout(Some(Duration::from_millis(100)));
+        let _ = stream.set_write_timeout(Some(Duration::from_millis(100)));
+        Ok(stream)
+    }
+    #[cfg(windows)]
+    {
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(sock_path)
+    }
+}
+
 pub type EofCallback = Box<dyn Fn() + Send + Sync + 'static>;
 
 pub struct MpvDriver {
     process: Mutex<Option<Child>>,
     sock_path: String,
-    cmd_stream: Mutex<Option<UnixStream>>,
+    cmd_stream: Mutex<Option<IpcStream>>,
     position_ms: Arc<AtomicU64>,
     duration_ms: Arc<AtomicU64>,
     is_playing: Arc<AtomicBool>,
@@ -25,37 +46,63 @@ pub struct MpvDriver {
 
 impl MpvDriver {
     pub fn new() -> Result<Self> {
-        let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| std::env::temp_dir());
         let rand_id = fastrand::u64(..);
-        let sock_path = runtime_dir
-            .join(format!("cloudpulse_mpv_{}_{}.sock", std::process::id(), rand_id))
-            .to_string_lossy()
-            .to_string();
-        let _ = std::fs::remove_file(&sock_path);
+        #[cfg(windows)]
+        let sock_path = format!(r"\\.\pipe\cloudpulse_mpv_{}_{}", std::process::id(), rand_id);
 
-        let mut cmd = Command::new("mpv");
+        #[cfg(unix)]
+        let sock_path = {
+            let runtime_dir = crate::paths::runtime_dir();
+            let path = runtime_dir
+                .join(format!("cloudpulse_mpv_{}_{}.sock", std::process::id(), rand_id))
+                .to_string_lossy()
+                .to_string();
+            let _ = std::fs::remove_file(&path);
+            path
+        };
+
+        let mut mpv_path = std::path::PathBuf::from("mpv");
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                let local_mpv = dir.join(if cfg!(windows) { "mpv.exe" } else { "mpv" });
+                if local_mpv.exists() {
+                    mpv_path = local_mpv;
+                }
+            }
+        }
+
+        let mut cmd = Command::new(mpv_path);
         cmd.arg("--idle=yes")
             .arg("--no-video")
             .arg(format!("--input-ipc-server={}", sock_path))
-            .arg("--ao=pipewire,pulse,alsa")
             .arg("--audio-buffer=0.2")
             .arg("--demuxer-max-bytes=24M")
             .arg("--demuxer-max-back-bytes=6M")
             .arg("--network-timeout=15")
-            .arg("--user-agent=Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0")
+            .arg("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
             .arg("--force-window=no")
             .arg("--terminal=no")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
 
-        unsafe {
-            cmd.pre_exec(|| {
-                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
-                Ok(())
-            });
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            cmd.arg("--ao=wasapi");
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.arg("--ao=pipewire,pulse,alsa");
+            unsafe {
+                cmd.pre_exec(|| {
+                    libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+                    Ok(())
+                });
+            }
         }
 
         let child = cmd.spawn().context("Failed to spawn mpv background process")?;
@@ -64,13 +111,9 @@ impl MpvDriver {
         let mut connected_cmd = None;
         for _ in 0..30 {
             std::thread::sleep(Duration::from_millis(50));
-            if std::path::Path::new(&sock_path).exists() {
-                if let Ok(stream) = UnixStream::connect(&sock_path) {
-                    let _ = stream.set_read_timeout(Some(Duration::from_millis(100)));
-                    let _ = stream.set_write_timeout(Some(Duration::from_millis(100)));
-                    connected_cmd = Some(stream);
-                    break;
-                }
+            if let Ok(stream) = connect_ipc(&sock_path) {
+                connected_cmd = Some(stream);
+                break;
             }
         }
 
@@ -78,6 +121,7 @@ impl MpvDriver {
 
         // Continually drain command replies so kernel socket buffer never blocks mpv IPC
         if let Ok(reader_stream) = cmd_stream.try_clone() {
+            #[cfg(unix)]
             let _ = reader_stream.set_read_timeout(None);
             std::thread::spawn(move || {
                 let mut reader = BufReader::new(reader_stream);
@@ -92,8 +136,9 @@ impl MpvDriver {
         }
 
         // Establish second connection for event monitoring
-        let mut evt_stream = UnixStream::connect(&sock_path)
+        let mut evt_stream = connect_ipc(&sock_path)
             .context("Connecting event socket to mpv IPC")?;
+        #[cfg(unix)]
         let _ = evt_stream.set_read_timeout(None); // blocking read in dedicated thread
 
         // Register property observers on event socket
@@ -224,9 +269,7 @@ impl MpvDriver {
     fn send_command(&self, json_cmd: &str) -> Result<()> {
         let mut stream_guard = self.cmd_stream.lock().unwrap();
         if stream_guard.is_none() {
-            if let Ok(s) = UnixStream::connect(&self.sock_path) {
-                let _ = s.set_read_timeout(Some(Duration::from_millis(100)));
-                let _ = s.set_write_timeout(Some(Duration::from_millis(100)));
+            if let Ok(s) = connect_ipc(&self.sock_path) {
                 *stream_guard = Some(s);
             }
         }
@@ -241,9 +284,7 @@ impl MpvDriver {
 
         // Reconnect and retry once
         *stream_guard = None;
-        if let Ok(mut s) = UnixStream::connect(&self.sock_path) {
-            let _ = s.set_read_timeout(Some(Duration::from_millis(100)));
-            let _ = s.set_write_timeout(Some(Duration::from_millis(100)));
+        if let Ok(mut s) = connect_ipc(&self.sock_path) {
             if s.write_all(payload.as_bytes()).is_ok() {
                 *stream_guard = Some(s);
                 return Ok(());

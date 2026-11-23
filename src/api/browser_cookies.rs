@@ -23,7 +23,18 @@ pub fn scan_for_soundcloud_cookie() -> Option<String> {
     collect_sqlite_files(&home_path.join(".config").join("google-chrome"), &mut candidate_dbs);
     collect_sqlite_files(&home_path.join(".config").join("BraveSoftware").join("Brave-Browser"), &mut candidate_dbs);
 
-    // 4. Dual-boot Windows profiles if mounted
+    // 4. Native Windows AppData & LocalAppData profiles (when running on Windows)
+    if let Some(appdata) = std::env::var_os("APPDATA").map(PathBuf::from) {
+        collect_sqlite_files(&appdata.join("Mozilla").join("Firefox").join("Profiles"), &mut candidate_dbs);
+        collect_sqlite_files(&appdata.join("zen").join("Profiles"), &mut candidate_dbs);
+    }
+    if let Some(localappdata) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
+        collect_sqlite_files(&localappdata.join("Google").join("Chrome").join("User Data"), &mut candidate_dbs);
+        collect_sqlite_files(&localappdata.join("BraveSoftware").join("Brave-Browser").join("User Data"), &mut candidate_dbs);
+        collect_sqlite_files(&localappdata.join("Microsoft").join("Edge").join("User Data"), &mut candidate_dbs);
+    }
+
+    // 5. Dual-boot Windows profiles if mounted on Linux
     for mount_root in &["/mnt/windows/Users", "/mnt/c/Users", "/media/windows/Users"] {
         let users_dir = Path::new(mount_root);
         if users_dir.is_dir() {

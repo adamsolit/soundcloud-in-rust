@@ -242,9 +242,9 @@ impl Application {
 
                     if let Some(ref m) = *mpris_key.borrow() {
                         m.handler.set_playback_status(if playing {
-                            mpris_server::PlaybackStatus::Playing
+                            crate::mpris::PlaybackStatus::Playing
                         } else {
-                            mpris_server::PlaybackStatus::Paused
+                            crate::mpris::PlaybackStatus::Paused
                         });
                     }
                     glib::Propagation::Stop
@@ -301,7 +301,7 @@ impl Application {
                         let pos = state_mpris_init.pending_resume_pos.borrow().unwrap_or(0);
                         service.handler.set_position_micros(pos * 1000);
                         service.update_metadata(Some(track)).await;
-                        service.update_status(mpris_server::PlaybackStatus::Paused).await;
+                        service.update_status(crate::mpris::PlaybackStatus::Paused).await;
                         service.emit_seeked(pos * 1000).await;
                     }
 
@@ -309,9 +309,9 @@ impl Application {
                     let q = q_arc.lock().unwrap();
                     let shuf = q.shuffle;
                     let loop_st = match q.repeat_mode {
-                        crate::audio::types::RepeatMode::Off => mpris_server::LoopStatus::None,
-                        crate::audio::types::RepeatMode::One => mpris_server::LoopStatus::Track,
-                        crate::audio::types::RepeatMode::All => mpris_server::LoopStatus::Playlist,
+                        crate::audio::types::RepeatMode::Off => crate::mpris::LoopStatus::None,
+                        crate::audio::types::RepeatMode::One => crate::mpris::LoopStatus::Track,
+                        crate::audio::types::RepeatMode::All => crate::mpris::LoopStatus::Playlist,
                     };
                     drop(q);
                     service.update_shuffle(shuf).await;
@@ -361,9 +361,9 @@ impl Application {
                         glib::spawn_future_local(async move {
                             if let Some(ref m) = *mpris_holder.borrow() {
                                 let status = if playing {
-                                    mpris_server::PlaybackStatus::Playing
+                                    crate::mpris::PlaybackStatus::Playing
                                 } else {
-                                    mpris_server::PlaybackStatus::Paused
+                                    crate::mpris::PlaybackStatus::Paused
                                 };
                                 m.update_status(status).await;
                                 m.emit_seeked(pos * 1000).await;
@@ -378,7 +378,7 @@ impl Application {
                         let mpris_holder = Rc::clone(&state_clone.mpris);
                         glib::spawn_future_local(async move {
                             if let Some(ref m) = *mpris_holder.borrow() {
-                                m.update_status(mpris_server::PlaybackStatus::Paused).await;
+                                m.update_status(crate::mpris::PlaybackStatus::Paused).await;
                                 m.emit_seeked(pos * 1000).await;
                             }
                         });
@@ -410,7 +410,7 @@ impl Application {
                         let mpris_holder = Rc::clone(&state_clone.mpris);
                         glib::spawn_future_local(async move {
                             if let Some(ref m) = *mpris_holder.borrow() {
-                                m.update_status(mpris_server::PlaybackStatus::Stopped).await;
+                                m.update_status(crate::mpris::PlaybackStatus::Stopped).await;
                             }
                         });
                     }
@@ -465,9 +465,9 @@ impl Application {
                     }
                     MprisCommand::SetLoopStatus(loop_status) => {
                         let mode = match loop_status {
-                            mpris_server::LoopStatus::None => crate::audio::types::RepeatMode::Off,
-                            mpris_server::LoopStatus::Track => crate::audio::types::RepeatMode::One,
-                            mpris_server::LoopStatus::Playlist => crate::audio::types::RepeatMode::All,
+                            crate::mpris::LoopStatus::None => crate::audio::types::RepeatMode::Off,
+                            crate::mpris::LoopStatus::Track => crate::audio::types::RepeatMode::One,
+                            crate::mpris::LoopStatus::Playlist => crate::audio::types::RepeatMode::All,
                         };
                         audio_clone.get_queue().lock().unwrap().repeat_mode = mode;
                         app_win.player_bar().set_repeat_mode(mode);
@@ -576,7 +576,7 @@ impl Application {
                             win_c.player_bar().update_playback_state(false);
                             win_c.mini_player().update_playback_state(false);
                             if let Some(ref m) = *state_c.mpris.borrow() {
-                                m.update_status(mpris_server::PlaybackStatus::Paused).await;
+                                m.update_status(crate::mpris::PlaybackStatus::Paused).await;
                             }
                             continue;
                         }
@@ -588,7 +588,7 @@ impl Application {
                             win_c.player_bar().update_playback_state(false);
                             win_c.mini_player().update_playback_state(false);
                             if let Some(ref m) = *state_c.mpris.borrow() {
-                                m.update_status(mpris_server::PlaybackStatus::Stopped).await;
+                                m.update_status(crate::mpris::PlaybackStatus::Stopped).await;
                             }
                         }
                     }
@@ -599,11 +599,11 @@ impl Application {
                         let pos = state_c.audio.get_position_ms();
                         if let Some(ref m) = *state_c.mpris.borrow() {
                             let status = if is_playing {
-                                mpris_server::PlaybackStatus::Playing
+                                crate::mpris::PlaybackStatus::Playing
                             } else if st == crate::audio::PlaybackState::Paused {
-                                mpris_server::PlaybackStatus::Paused
+                                crate::mpris::PlaybackStatus::Paused
                             } else {
-                                mpris_server::PlaybackStatus::Stopped
+                                crate::mpris::PlaybackStatus::Stopped
                             };
                             m.update_status(status).await;
                             m.emit_seeked(pos * 1000).await;
@@ -662,9 +662,9 @@ impl Application {
             glib::spawn_future_local(async move {
                 if let Some(ref m) = *mpris_clone.borrow() {
                     let st = if playing {
-                        mpris_server::PlaybackStatus::Playing
+                        crate::mpris::PlaybackStatus::Playing
                     } else {
-                        mpris_server::PlaybackStatus::Paused
+                        crate::mpris::PlaybackStatus::Paused
                     };
                     m.update_status(st).await;
                     m.emit_seeked(pos * 1000).await;
@@ -785,9 +785,9 @@ impl Application {
             glib::spawn_future_local(async move {
                 if let Some(ref m) = *m_c.borrow() {
                     let loop_st = match new_mode {
-                        crate::audio::types::RepeatMode::Off => mpris_server::LoopStatus::None,
-                        crate::audio::types::RepeatMode::One => mpris_server::LoopStatus::Track,
-                        crate::audio::types::RepeatMode::All => mpris_server::LoopStatus::Playlist,
+                        crate::audio::types::RepeatMode::Off => crate::mpris::LoopStatus::None,
+                        crate::audio::types::RepeatMode::One => crate::mpris::LoopStatus::Track,
+                        crate::audio::types::RepeatMode::All => crate::mpris::LoopStatus::Playlist,
                     };
                     m.update_loop_status(loop_st).await;
                 }
@@ -963,9 +963,9 @@ impl Application {
             glib::spawn_future_local(async move {
                 if let Some(ref m) = *mpris_clone.borrow() {
                     let st = if playing {
-                        mpris_server::PlaybackStatus::Playing
+                        crate::mpris::PlaybackStatus::Playing
                     } else {
-                        mpris_server::PlaybackStatus::Paused
+                        crate::mpris::PlaybackStatus::Paused
                     };
                     m.update_status(st).await;
                     m.emit_seeked(pos * 1000).await;
@@ -2040,7 +2040,7 @@ impl Application {
                 if let Some(ref m) = *mpris_holder.borrow() {
                     m.handler.set_position_micros(resume_pos * 1000);
                     m.update_metadata(Some(&track_c)).await;
-                    m.update_status(mpris_server::PlaybackStatus::Paused).await;
+                    m.update_status(crate::mpris::PlaybackStatus::Paused).await;
                     m.emit_seeked(resume_pos * 1000).await;
                 }
             });
@@ -2281,7 +2281,7 @@ async fn play_track_internal_with_seek(
                 if let Some(ref m) = *state.mpris.borrow() {
                     m.handler.set_position_micros(seek_to_ms * 1000);
                     m.update_metadata(Some(&track)).await;
-                    m.update_status(mpris_server::PlaybackStatus::Playing).await;
+                    m.update_status(crate::mpris::PlaybackStatus::Playing).await;
                     m.emit_seeked(seek_to_ms * 1000).await;
                 }
 

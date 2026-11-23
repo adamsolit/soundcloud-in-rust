@@ -7,4 +7,5 @@ pub mod db;
 pub mod keyring;
 pub mod models;
 pub mod mpris;
+pub mod paths;
 pub mod ui;

@@ -66,6 +66,7 @@ fn main() {
     info!("app.run() finished with status: {:?}", exit_status);
 }
 
+#[cfg(target_os = "linux")]
 fn ensure_desktop_integration() {
     let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else { return; };
     let app_dir = home.join(".local/share/applications");
@@ -115,3 +116,6 @@ fn ensure_desktop_integration() {
         .arg(&app_dir)
         .status();
 }
+
+#[cfg(not(target_os = "linux"))]
+fn ensure_desktop_integration() {}

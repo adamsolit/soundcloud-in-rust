@@ -1,0 +1,128 @@
+name: Windows 1:1 Native Release
+
+on:
+  push:
+    branches: [ "master" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build & Package Windows x86_64
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libadwaita
+            mingw-w64-ucrt-x86_64-rust
+            mingw-w64-ucrt-x86_64-sqlite3
+            mingw-w64-ucrt-x86_64-openssl
+            mingw-w64-ucrt-x86_64-mpv
+            zip
+
+      - name: Verify Environment
+        shell: msys2 {0}
+        run: |
+          rustc --version
+          cargo --version
+          pkg-config --modversion gtk4
+          pkg-config --modversion libadwaita-1
+          gcc --version
+
+      - name: Build CloudPulse for Windows
+        shell: msys2 {0}
+        run: |
+          cargo build --release --verbose
+
+      - name: Bundle Portable Windows Distribution
+        shell: msys2 {0}
+        run: |
+          DIST_DIR="soundcloud-windows-x86_64"
+          mkdir -p "$DIST_DIR"
+
+          # 1. Copy main executable & icon
+          cp target/release/cloudpulse.exe "$DIST_DIR/soundcloud.exe"
+          if [ -f assets/soundcloud.ico ]; then
+            cp assets/soundcloud.ico "$DIST_DIR/"
+          fi
+
+          # 2. Bundle headless MPV backend
+          if [ -f /ucrt64/bin/mpv.exe ]; then
+            cp /ucrt64/bin/mpv.exe "$DIST_DIR/"
+          fi
+
+          # 3. Bundle GLib schemas
+          mkdir -p "$DIST_DIR/share/glib-2.0/schemas"
+          cp -r /ucrt64/share/glib-2.0/schemas/* "$DIST_DIR/share/glib-2.0/schemas/" 2>/dev/null || true
+          glib-compile-schemas "$DIST_DIR/share/glib-2.0/schemas/"
+
+          # 4. Bundle Adwaita & hicolor icons
+          mkdir -p "$DIST_DIR/share/icons"
+          cp -r /ucrt64/share/icons/Adwaita "$DIST_DIR/share/icons/" 2>/dev/null || true
+          cp -r /ucrt64/share/icons/hicolor "$DIST_DIR/share/icons/" 2>/dev/null || true
+
+          # 5. Create launcher batch file
+          cat << 'EOF' > "$DIST_DIR/run.bat"
+          @echo off
+          setlocal
+          cd /d "%~dp0"
+          start "" "%~dp0soundcloud.exe"
+          EOF
+
+          # 6. Recursively collect and bundle all required runtime DLLs
+          python3 -c "
+          import os, shutil, subprocess
+
+          dist = '$DIST_DIR'
+          bins = [os.path.join(dist, 'soundcloud.exe')]
+          mpv_bin = os.path.join(dist, 'mpv.exe')
+          if os.path.exists(mpv_bin):
+              bins.append(mpv_bin)
+
+          copied = set()
+          queue = list(bins)
+
+          while queue:
+              curr = queue.pop(0)
+              res = subprocess.run(['ldd', curr], capture_output=True, text=True)
+              for line in res.stdout.splitlines():
+                  parts = line.strip().split('=>')
+                  if len(parts) == 2:
+                      dll_path = parts[1].strip().split(' ')[0]
+                      if dll_path.startswith('/ucrt64') and os.path.exists(dll_path):
+                          dll_name = os.path.basename(dll_path)
+                          dest = os.path.join(dist, dll_name)
+                          if dll_name not in copied:
+                              copied.add(dll_name)
+                              shutil.copy2(dll_path, dest)
+                              queue.append(dest)
+          print(f'Successfully bundled {len(copied)} runtime dependencies into {dist}')
+          "
+
+          # 7. Package ZIP distribution
+          zip -r soundcloud-v0.1.1-windows-x86_64.zip "$DIST_DIR"
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: soundcloud-windows-x86_64
+          path: soundcloud-v0.1.1-windows-x86_64.zip
+
+      - name: Attach Windows Archive to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload v0.1.1 soundcloud-v0.1.1-windows-x86_64.zip --clobber || true

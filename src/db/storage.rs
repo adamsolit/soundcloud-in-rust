@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection};
 use std::fs;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::{debug, info};
 
@@ -14,13 +13,7 @@ pub struct Database {
 
 impl Database {
     pub fn new() -> Result<Self> {
-        let xdg_data = std::env::var("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-                PathBuf::from(home).join(".local").join("share")
-            });
-        let app_dir = xdg_data.join("cloudpulse");
+        let app_dir = crate::paths::data_dir();
         fs::create_dir_all(&app_dir)?;
         let db_path = app_dir.join("library.sqlite3");
 
