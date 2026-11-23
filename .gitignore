@@ -7,3 +7,5 @@
 .cache/
 auth_session.json
 *.tar.gz
+*.zip
+*.exe

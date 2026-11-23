@@ -27,7 +27,7 @@ fn main() {
         .expect("Failed to build Tokio runtime");
     let _tokio_guard = tokio_rt.enter();
 
-    info!("Starting CloudPulse Native Linux SoundCloud Client...");
+    info!("Starting SoundCloud Desktop Client...");
 
     let app = adw::Application::builder()
         .application_id(APP_ID)

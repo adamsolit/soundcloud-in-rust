@@ -1929,7 +1929,11 @@ impl Application {
 
             // 2. If not authenticated, check browser session cookies
             if !state_c.client.session.is_authenticated().await {
-                if let Some(cookie_token) = crate::api::browser_cookies::scan_for_soundcloud_cookie() {
+                let token_opt = tokio::task::spawn_blocking(crate::api::browser_cookies::scan_for_soundcloud_cookie)
+                    .await
+                    .ok()
+                    .flatten();
+                if let Some(cookie_token) = token_opt {
                     let _ = state_c.client.session.set_oauth_token(&cookie_token).await;
                     info!("Auto-detected active SoundCloud session from browser");
                 }

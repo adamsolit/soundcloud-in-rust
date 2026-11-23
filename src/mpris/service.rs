@@ -25,9 +25,12 @@ pub enum LoopStatus {
     Playlist,
 }
 
+#[cfg(target_os = "linux")]
 use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(target_os = "linux")]
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::UnboundedSender;
+#[cfg(target_os = "linux")]
 use tracing::{error, info};
 
 use crate::models::track::Track;
@@ -367,12 +370,26 @@ impl MprisService {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub struct MprisService {}
+#[derive(Clone, Default)]
+pub struct MprisHandler;
+
+#[cfg(not(target_os = "linux"))]
+impl MprisHandler {
+    pub fn set_playback_status(&self, _status: PlaybackStatus) {}
+    pub fn set_track(&self, _track: Option<Track>) {}
+    pub fn set_volume(&self, _vol: f64) {}
+    pub fn set_position_micros(&self, _pos_us: u64) {}
+}
+
+#[cfg(not(target_os = "linux"))]
+pub struct MprisService {
+    pub handler: MprisHandler,
+}
 
 #[cfg(not(target_os = "linux"))]
 impl MprisService {
     pub async fn start(_cmd_tx: UnboundedSender<MprisCommand>) -> Result<Self> {
-        Ok(Self {})
+        Ok(Self { handler: MprisHandler })
     }
 
     pub async fn update_metadata(&self, _track: Option<&Track>) {}
