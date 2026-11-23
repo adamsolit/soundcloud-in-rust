@@ -24,18 +24,18 @@ struct WaveformThemeColors {
 fn get_waveform_colors() -> WaveformThemeColors {
     match current_theme() {
         AppTheme::AnthropicClassical => WaveformThemeColors {
-            played: (0.855, 0.467, 0.337), // Terracotta #da7756
-            hover: (0.902, 0.529, 0.404, 0.65), // Warm Terracotta tint #e7876d
-            unplayed: (0.957, 0.937, 0.902, 0.18), // Warm Alabaster #f4efe6
-            refl_played: (0.855, 0.467, 0.337, 0.35),
-            refl_unplayed: (0.957, 0.937, 0.902, 0.07),
-            comment: (0.831, 0.639, 0.451), // Laurel Bronze / Gold #d4a373
-            bookmark: (0.831, 0.639, 0.451), // Laurel Bronze #d4a373
-            bookmark_hairline: (0.831, 0.639, 0.451, 0.45),
-            hover_line: (0.957, 0.937, 0.902, 0.85),
-            pill_bg: (0.102, 0.090, 0.078, 0.96), // Warm Basalt #1a1714
-            pill_border: (0.855, 0.467, 0.337, 0.50), // Terracotta hairline
-            pill_text: (0.957, 0.937, 0.902), // Alabaster #f4efe6
+            played: (1.0, 1.0, 1.0), // Crisp White #ffffff
+            hover: (1.0, 1.0, 1.0, 0.65), // Soft White
+            unplayed: (1.0, 1.0, 1.0, 0.18),
+            refl_played: (1.0, 1.0, 1.0, 0.35),
+            refl_unplayed: (1.0, 1.0, 1.0, 0.07),
+            comment: (1.0, 1.0, 1.0),
+            bookmark: (1.0, 1.0, 1.0),
+            bookmark_hairline: (1.0, 1.0, 1.0, 0.45),
+            hover_line: (1.0, 1.0, 1.0, 0.85),
+            pill_bg: (0.10, 0.10, 0.10, 0.96),
+            pill_border: (1.0, 1.0, 1.0, 0.35),
+            pill_text: (1.0, 1.0, 1.0),
         },
         AppTheme::ObsidianDark => WaveformThemeColors {
             played: (1.0, 1.0, 1.0),
@@ -273,7 +273,7 @@ impl WaveformWidget {
                     }
 
                     cr.set_font_size(9.0);
-                    cr.select_font_face("Cinzel", gtk::cairo::FontSlant::Normal, gtk::cairo::FontWeight::Bold);
+                    cr.select_font_face("Inter", gtk::cairo::FontSlant::Normal, gtk::cairo::FontWeight::Bold);
                     if let Ok(ext) = cr.text_extents(&time_str) {
                         let pill_w = ext.width() + 10.0;
                         let pill_h = ext.height() + 5.0;

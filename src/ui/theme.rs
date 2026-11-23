@@ -21,7 +21,7 @@ impl AppTheme {
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            AppTheme::AnthropicClassical => "Anthropic Classical (Hellenic Editorial)",
+            AppTheme::AnthropicClassical => "Minimalist Monochrome (Swiss Clean)",
             AppTheme::ObsidianDark => "Obsidian Dark (Legacy Monochrome)",
         }
     }

@@ -1,15 +1,15 @@
 /* ==========================================================================
-   CloudPulse — Anthropic Classical (Hellenic Editorial) Theme
+   CloudPulse — Modern Swiss Minimalist Monochrome Theme
    Aesthetic Philosophy:
-   - Literary, architectural, statuesque Greek proportions & Anthropic restraint
-   - Deep warm basalt stone (#131210) & terracotta sienna (#da7756)
-   - Classical inscriptional capitals (Cinzel) & Venetian editorial serifs (Libron / Arsenica)
-   - Refined hairline borders, warm alabaster cream typography (#f4efe6)
-   - Tactile, physics-based micro-interactions with zero artificial glow
+   - Ultra-clean Swiss modernist proportions & restrained elegance
+   - Deep obsidian/basalt base (#101010, #141414, #181818) & crisp white accents (#ffffff)
+   - Contemporary geometric sans-serif typography (Inter / Adwaita Sans / Noto Sans Arabic)
+   - Monospace precision timing indicators (JetBrains Mono / Adwaita Mono)
+   - Tactile, physics-based micro-interactions with pure monochrome contrast
    ========================================================================== */
 
 * {
-    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', 'Noto Serif Display', 'Noto Serif', 'Adwaita Sans', 'Inter', 'Noto Sans Arabic', serif;
+    font-family: 'Inter', 'Adwaita Sans', 'Cantarell', 'Noto Sans Arabic', 'Cairo', 'IBM Plex Sans Arabic', system-ui, -apple-system, sans-serif;
     -gtk-icon-style: symbolic;
 }
 
@@ -23,7 +23,7 @@ headerbar,
 popover,
 scrolledwindow,
 stack {
-    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', 'Noto Serif Display', 'Noto Serif', 'Adwaita Sans', 'Inter', 'Noto Sans Arabic', serif;
+    font-family: 'Inter', 'Adwaita Sans', 'Cantarell', 'Noto Sans Arabic', 'Cairo', 'IBM Plex Sans Arabic', system-ui, -apple-system, sans-serif;
 }
 
 /* ==========================================================================
@@ -31,14 +31,14 @@ stack {
    ========================================================================== */
 
 window.cloudpulse-main-window {
-    background-color: #131210;
-    color: #f4efe6;
+    background-color: #101010;
+    color: #ffffff;
 }
 
-/* HeaderBar — Carved Classical Architrave */
+/* HeaderBar — Minimalist Precision Bar */
 headerbar {
-    background-color: #161412;
-    border-bottom: 1px solid rgba(218, 119, 86, 0.18);
+    background-color: #141414;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
     padding: 0 14px;
     min-height: 48px;
@@ -49,19 +49,19 @@ headerbar windowhandle {
 }
 
 headerbar .title {
-    font-family: 'Cinzel', 'Noto Serif Display', serif;
-    font-weight: 600;
+    font-family: 'Inter', 'Adwaita Sans', 'Cantarell', sans-serif;
+    font-weight: 700;
     font-size: 0.88rem;
-    color: #f4efe6;
+    color: #ffffff;
     letter-spacing: 1.4px;
     text-transform: uppercase;
 }
 
 .header-brand-title {
-    font-family: 'Cinzel', 'Noto Serif Display', serif;
-    font-weight: 600;
+    font-family: 'Inter', 'Adwaita Sans', 'Cantarell', sans-serif;
+    font-weight: 700;
     font-size: 0.90rem;
-    color: #f4efe6;
+    color: #ffffff;
     letter-spacing: 1.6px;
     text-transform: uppercase;
 }
@@ -81,21 +81,21 @@ headerbar .title {
 }
 
 .header-profile-btn:hover {
-    background-color: rgba(235, 222, 205, 0.08);
-    border-color: rgba(218, 119, 86, 0.35);
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.25);
     transform: scale(1.04);
 }
 
 .header-profile-btn:active {
-    background-color: rgba(218, 119, 86, 0.20);
-    border-color: #da7756;
+    background-color: rgba(255, 255, 255, 0.16);
+    border-color: #ffffff;
     transform: scale(0.96);
 }
 
 .header-profile-avatar {
     border-radius: 50%;
-    background-color: #1d1b18;
-    border: 1.5px solid rgba(218, 119, 86, 0.35);
+    background-color: #1a1a1a;
+    border: 1.5px solid rgba(255, 255, 255, 0.20);
 }
 
 /* Viewport Transparency */
@@ -123,23 +123,23 @@ scrollbar slider {
     min-width: 6px;
     min-height: 6px;
     border-radius: 9999px;
-    background-color: rgba(235, 222, 205, 0.14);
+    background-color: rgba(255, 255, 255, 0.14);
     border: none;
     margin: 2px;
     transition: background-color 180ms ease;
 }
 
 scrollbar slider:hover {
-    background-color: rgba(218, 119, 86, 0.50);
+    background-color: rgba(255, 255, 255, 0.40);
 }
 
 /* ==========================================================================
-   2. Sidebar Navigation — Greek Fluted Pillar Structure
+   2. Sidebar Navigation — Clean Modern Fluted Column
    ========================================================================== */
 
 .sidebar-panel {
-    background-color: #171513;
-    border-right: 1px solid rgba(235, 222, 205, 0.07);
+    background-color: #141414;
+    border-right: 1px solid rgba(255, 255, 255, 0.07);
     padding: 16px 10px;
     min-width: 164px;
     transition: min-width 200ms cubic-bezier(0.16, 1, 0.3, 1), padding 200ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -151,21 +151,21 @@ scrollbar slider:hover {
 }
 
 .brand-label {
-    font-family: 'Cinzel', 'Noto Serif Display', serif;
-    font-weight: 700;
-    font-size: 1.15rem;
-    color: #f4efe6;
-    letter-spacing: 1.8px;
+    font-family: 'Inter', 'Adwaita Sans', sans-serif;
+    font-weight: 800;
+    font-size: 1.05rem;
+    color: #ffffff;
+    letter-spacing: 1.4px;
     text-transform: uppercase;
 }
 
 .sidebar-panel .brand-label {
-    font-size: 0.98rem;
-    letter-spacing: 1.5px;
+    font-size: 0.95rem;
+    letter-spacing: 1.2px;
 }
 
 .brand-accent {
-    color: #da7756;
+    color: #ffffff;
 }
 
 .btn-sidebar-toggle {
@@ -175,13 +175,13 @@ scrollbar slider:hover {
     min-width: 24px;
     min-height: 24px;
     padding: 2px;
-    color: #8f8475;
+    color: #888888;
     transition: color 140ms ease, background-color 140ms ease, transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn-sidebar-toggle:hover {
-    background-color: rgba(235, 222, 205, 0.08);
-    color: #f4efe6;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
     transform: scale(1.08);
 }
 
@@ -194,11 +194,11 @@ scrollbar slider:hover {
     border: none;
     border-radius: 8px;
     padding: 8px 12px;
-    color: #bfae9b;
-    font-family: 'Cinzel', 'Libron', serif;
-    font-weight: 500;
+    color: #a0a0a0;
+    font-family: 'Inter', 'Adwaita Sans', sans-serif;
+    font-weight: 600;
     font-size: 0.82rem;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.6px;
     text-transform: uppercase;
     transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
                 color 160ms cubic-bezier(0.16, 1, 0.3, 1),
@@ -210,53 +210,53 @@ scrollbar slider:hover {
 }
 
 .nav-button:hover {
-    background-color: rgba(235, 222, 205, 0.06);
-    color: #f4efe6;
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
     transform: translateX(2px);
 }
 
 .nav-button:active {
-    background-color: rgba(235, 222, 205, 0.12);
+    background-color: rgba(255, 255, 255, 0.12);
     transform: translateX(1px);
 }
 
 .nav-button.active {
-    background-color: rgba(218, 119, 86, 0.14);
-    color: #f4efe6;
-    font-weight: 600;
-    border-left: 3px solid #da7756;
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    font-weight: 700;
+    border-left: 3px solid #ffffff;
     border-radius: 0 8px 8px 0;
 }
 
 /* Sidebar User Status Pill */
 .sidebar-user-pill {
-    background-color: #1e1b18;
+    background-color: #1a1a1a;
     border-radius: 10px;
     padding: 9px 12px;
-    border: 1px solid rgba(218, 119, 86, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
                 border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
                 transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .sidebar-user-pill:hover {
-    background-color: #26221e;
-    border-color: rgba(218, 119, 86, 0.35);
+    background-color: #222222;
+    border-color: rgba(255, 255, 255, 0.25);
     transform: translateY(-1px);
 }
 
 .badge-connected {
-    font-family: 'Cinzel', serif;
-    color: #d4a373;
+    font-family: 'Inter', 'Adwaita Sans', sans-serif;
+    color: #ffffff;
     font-size: 0.74rem;
     font-weight: 600;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.5px;
     text-transform: uppercase;
 }
 
 .badge-guest {
-    font-family: 'Cinzel', serif;
-    color: #8c8274;
+    font-family: 'Inter', 'Adwaita Sans', sans-serif;
+    color: #888888;
     font-size: 0.74rem;
     font-weight: 500;
     letter-spacing: 0.5px;
@@ -268,55 +268,54 @@ scrollbar slider:hover {
    ========================================================================== */
 
 window.mini-player-window {
-    background-color: #161412;
-    color: #f4efe6;
-    border: 1px solid rgba(218, 119, 86, 0.28);
+    background-color: #141414;
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 14px;
     box-shadow: 0 16px 44px rgba(0, 0, 0, 0.85);
 }
 
 .mini-player-card {
-    background-color: #161412;
+    background-color: #141414;
 }
 
 .mini-player-artwork {
     border-radius: 8px;
-    background-color: #211e1a;
-    border: 1px solid rgba(235, 222, 205, 0.08);
+    background-color: #1e1e1e;
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .mini-player-title {
-    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', serif;
+    font-family: 'Inter', 'Adwaita Sans', 'Noto Sans Arabic', sans-serif;
     font-size: 0.88rem;
     font-weight: 600;
-    color: #f4efe6;
-    letter-spacing: 0.2px;
+    color: #ffffff;
+    letter-spacing: 0.1px;
 }
 
 .mini-player-artist {
-    font-family: 'Cinzel', serif;
+    font-family: 'Inter', 'Adwaita Sans', sans-serif;
     font-size: 0.74rem;
     font-weight: 500;
-    color: #bfae9b;
-    letter-spacing: 0.8px;
-    text-transform: uppercase;
+    color: #a0a0a0;
+    letter-spacing: 0.3px;
 }
 
 .mini-player-time {
-    font-family: 'Cinzel', monospace;
+    font-family: 'JetBrains Mono', 'Adwaita Mono', monospace;
     font-size: 0.70rem;
     font-weight: 500;
-    color: #8a8073;
+    color: #888888;
     font-feature-settings: "tnum";
 }
 
 /* ==========================================================================
-   4. Bottom Persistent Player Bar — Basalt Plinth
+   4. Bottom Persistent Player Bar — Sleek Basalt Plinth
    ========================================================================== */
 
 .player-bar {
-    background-color: #161412;
-    border-top: 1px solid rgba(218, 119, 86, 0.22);
+    background-color: #141414;
+    border-top: 1px solid rgba(255, 255, 255, 0.10);
     box-shadow: 0 -2px 14px rgba(0, 0, 0, 0.4);
     padding: 10px 24px 14px 24px;
     min-height: 86px;
@@ -325,94 +324,93 @@ window.mini-player-window {
 .player-artwork {
     border-radius: 8px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(235, 222, 205, 0.09);
+    border: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 .artist-avatar {
     border-radius: 50%;
-    background-color: #211e1a;
+    background-color: #1e1e1e;
     box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
-    border: 2px solid rgba(218, 119, 86, 0.35);
+    border: 2px solid rgba(255, 255, 255, 0.25);
 }
 
 .player-title {
-    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', serif;
+    font-family: 'Inter', 'Adwaita Sans', 'Noto Sans Arabic', sans-serif;
     font-weight: 600;
     font-size: 0.94rem;
-    color: #f4efe6;
+    color: #ffffff;
     line-height: 1.34;
-    letter-spacing: 0.2px;
+    letter-spacing: 0.1px;
 }
 
 .player-artist {
-    font-family: 'Cinzel', serif;
+    font-family: 'Inter', 'Adwaita Sans', sans-serif;
     font-size: 0.78rem;
     font-weight: 500;
-    color: #bfae9b;
-    letter-spacing: 0.7px;
-    text-transform: uppercase;
+    color: #a0a0a0;
+    letter-spacing: 0.3px;
 }
 
-/* Hero Transport Controls — Matte Ceramic Terracotta */
+/* Hero Transport Controls — Pure Minimalist White Button */
 .btn-transport-play {
-    background: #d97757;
-    color: #ffffff;
+    background: #ffffff;
+    color: #121212;
     border-radius: 50%;
     min-width: 44px;
     min-height: 44px;
     padding: 0;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.30);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.50);
     transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
                 background-color 140ms ease,
                 box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn-transport-play:hover {
-    background: #e28263;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.55);
-    transform: scale(1.05);
+    background: #f0f0f0;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.60);
+    transform: scale(1.06);
 }
 
 .btn-transport-play:active {
-    background: #c56546;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.60);
+    background: #d8d8d8;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
     transform: scale(0.96);
 }
 
 .btn-pill-play {
-    background: #d97757;
-    color: #ffffff;
-    font-family: 'Cinzel', serif;
-    letter-spacing: 1.0px;
+    background: #ffffff;
+    color: #121212;
+    font-family: 'Inter', 'Adwaita Sans', sans-serif;
+    letter-spacing: 0.8px;
     text-transform: uppercase;
     border-radius: 9999px;
     padding: 8px 22px;
-    font-weight: 600;
+    font-weight: 700;
     font-size: 0.82rem;
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.40);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
     transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
                 background-color 140ms ease,
                 box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn-pill-play:hover {
-    background: #e28263;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.50);
+    background: #f0f0f0;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
     transform: translateY(-1px);
 }
 
 .btn-pill-play:active {
-    background: #c56546;
+    background: #d8d8d8;
     transform: translateY(0);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.60);
 }
 
 .btn-transport {
     background: transparent;
     border: none;
-    color: #bfae9b;
+    color: #a0a0a0;
     border-radius: 50%;
     min-width: 32px;
     min-height: 32px;
@@ -423,27 +421,27 @@ window.mini-player-window {
 }
 
 .btn-transport:hover {
-    color: #f4efe6;
-    background: rgba(235, 222, 205, 0.08);
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
     transform: scale(1.06);
 }
 
 .btn-transport:active {
-    background: rgba(235, 222, 205, 0.14);
+    background: rgba(255, 255, 255, 0.14);
     transform: scale(0.94);
 }
 
 .btn-transport.active {
-    color: #da7756;
-    background: rgba(218, 119, 86, 0.16);
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.18);
 }
 
 .btn-heart-liked {
-    color: #da7756;
+    color: #ffffff;
 }
 
 .btn-card-like {
-    color: rgba(235, 222, 205, 0.35);
+    color: rgba(255, 255, 255, 0.40);
     background: transparent;
     border: none;
     border-radius: 6px;
@@ -456,8 +454,8 @@ window.mini-player-window {
 }
 
 .btn-card-like:hover {
-    color: #da7756;
-    background: rgba(218, 119, 86, 0.14);
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.12);
     transform: scale(1.10);
 }
 
@@ -466,28 +464,28 @@ window.mini-player-window {
 }
 
 .btn-card-like.btn-heart-liked {
-    color: #da7756;
+    color: #ffffff;
 }
 
-/* Classical Monospace Tabular Time Indicators */
+/* Precision Monospace Tabular Time Indicators */
 .time-label {
-    font-family: 'Cinzel', monospace;
+    font-family: 'JetBrains Mono', 'Adwaita Mono', monospace;
     font-size: 0.78rem;
     font-weight: 500;
-    color: #8c8274;
-    letter-spacing: 0.6px;
+    color: #888888;
+    letter-spacing: 0.4px;
     font-feature-settings: "tnum";
     font-variant-numeric: tabular-nums;
 }
 
 /* ==========================================================================
-   5. Track Cards & Grids — Carved Stone Tablets
+   5. Track Cards & Grids — Sculpted Slate Tablets
    ========================================================================== */
 
 .track-card {
-    background-color: #1a1815;
+    background-color: #181818;
     border-radius: 10px;
-    border: 1px solid rgba(235, 222, 205, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.07);
     padding: 12px 16px;
     transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
                 background-color 160ms ease,
@@ -496,16 +494,16 @@ window.mini-player-window {
 }
 
 .track-card:hover {
-    background-color: #211e1a;
-    border-color: rgba(218, 119, 86, 0.28);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    background-color: #202020;
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.50);
     transform: translateY(-2px);
 }
 
 .track-card-artwork {
     border-radius: 7px;
-    background-color: #211e1a;
-    border: 1px solid rgba(235, 222, 205, 0.08);
+    background-color: #1e1e1e;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
     transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 160ms ease;
 }
@@ -515,66 +513,65 @@ window.mini-player-window {
 }
 
 .card-play-btn {
-    background: #d97757;
-    color: #ffffff;
+    background: #ffffff;
+    color: #121212;
     border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.50);
     transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
                 background-color 140ms ease;
 }
 
 .card-play-btn:hover {
-    background: #e28263;
+    background: #f0f0f0;
     transform: scale(1.08);
 }
 
 .card-play-btn:active {
-    background: #c56546;
+    background: #d8d8d8;
     transform: scale(0.94);
 }
 
 .track-card-title {
-    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', 'Noto Naskh Arabic', serif;
+    font-family: 'Inter', 'Adwaita Sans', 'Noto Sans Arabic', 'Cairo', sans-serif;
     font-weight: 600;
     font-size: 0.94rem;
-    color: #f4efe6;
-    line-height: 1.38;
-    letter-spacing: 0.15px;
+    color: #ffffff;
+    line-height: 1.36;
+    letter-spacing: 0.1px;
 }
 
 .track-card-artist {
-    font-family: 'Cinzel', serif;
+    font-family: 'Inter', 'Adwaita Sans', sans-serif;
     font-size: 0.78rem;
     font-weight: 500;
-    color: #bfae9b;
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
+    color: #a0a0a0;
+    letter-spacing: 0.3px;
 }
 
 .track-card-stats {
-    font-family: 'Cinzel', monospace;
+    font-family: 'JetBrains Mono', 'Adwaita Mono', monospace;
     font-size: 0.72rem;
     font-weight: 500;
-    color: #8c8274;
-    letter-spacing: 0.5px;
+    color: #888888;
+    letter-spacing: 0.3px;
 }
 
 /* ==========================================================================
-   6. Architectural Filter Chips & Genre Tablets
+   6. Architectural Filter Chips & Modern Capsules
    ========================================================================== */
 
 .filter-chip {
-    font-family: 'Cinzel', serif;
-    font-size: 0.75rem;
+    font-family: 'Inter', 'Adwaita Sans', sans-serif;
+    font-size: 0.76rem;
     font-weight: 600;
-    letter-spacing: 1.1px;
+    letter-spacing: 0.6px;
     text-transform: uppercase;
-    background-color: #1e1b18;
-    border: 1px solid rgba(235, 222, 205, 0.09);
+    background-color: #1e1e1e;
+    border: 1px solid rgba(255, 255, 255, 0.09);
     border-radius: 8px;
     padding: 7px 16px;
-    color: #bfae9b;
+    color: #b0b0b0;
     transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
                 border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
                 color 160ms ease,
@@ -583,9 +580,9 @@ window.mini-player-window {
 }
 
 .filter-chip:hover {
-    background-color: #26221e;
-    border-color: rgba(218, 119, 86, 0.32);
-    color: #f4efe6;
+    background-color: #282828;
+    border-color: rgba(255, 255, 255, 0.28);
+    color: #ffffff;
     transform: translateY(-1px);
 }
 
@@ -594,24 +591,24 @@ window.mini-player-window {
 }
 
 .filter-chip.active {
-    background: #d97757;
-    border: 1px solid #da7756;
-    color: #ffffff;
+    background: #ffffff;
+    border: 1px solid #ffffff;
+    color: #121212;
     font-weight: 700;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
 /* ==========================================================================
-   7. Editorial Search Input
+   7. Modern Clean Search Input
    ========================================================================== */
 
 .sc-search-entry {
-    background-color: #1a1815;
-    border: 1px solid rgba(235, 222, 205, 0.10);
+    background-color: #181818;
+    border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 10px;
     padding: 9px 16px;
-    color: #f4efe6;
-    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', 'Adwaita Sans', serif;
+    color: #ffffff;
+    font-family: 'Inter', 'Adwaita Sans', 'Noto Sans Arabic', sans-serif;
     font-size: 0.88rem;
     transition: border-color 160ms ease,
                 background-color 160ms ease,
@@ -619,9 +616,9 @@ window.mini-player-window {
 }
 
 .sc-search-entry:focus-within {
-    background-color: #201d19;
-    border-color: #da7756;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    background-color: #202020;
+    border-color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.40);
 }
 
 /* ==========================================================================
@@ -639,7 +636,7 @@ window.mini-player-window {
 }
 
 .comment-marker {
-    background-color: #d4a373;
+    background-color: #ffffff;
     border-radius: 50%;
     min-width: 5px;
     min-height: 5px;
@@ -647,9 +644,9 @@ window.mini-player-window {
 
 /* Upload Dropzone */
 .upload-dropzone {
-    border: 1.5px dashed rgba(218, 119, 86, 0.30);
+    border: 1.5px dashed rgba(255, 255, 255, 0.25);
     border-radius: 14px;
-    background-color: rgba(218, 119, 86, 0.03);
+    background-color: rgba(255, 255, 255, 0.02);
     padding: 44px 24px;
     transition: border-color 160ms ease,
                 background-color 160ms ease,
@@ -657,8 +654,8 @@ window.mini-player-window {
 }
 
 .upload-dropzone:hover {
-    border-color: #da7756;
-    background-color: rgba(218, 119, 86, 0.07);
+    border-color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.06);
     transform: scale(1.01);
 }
 
@@ -669,22 +666,22 @@ window.mini-player-window {
 scale.volume-scale trough {
     min-height: 4px;
     border-radius: 2px;
-    background-color: #272420;
+    background-color: #282828;
     border: none;
 }
 
 scale.volume-scale highlight {
-    background-color: #da7756;
+    background-color: #ffffff;
     border-radius: 2px;
 }
 
 scale.volume-scale slider {
-    background-color: #f4efe6;
-    border: 1.5px solid #da7756;
+    background-color: #ffffff;
+    border: 1.5px solid #ffffff;
     min-width: 12px;
     min-height: 12px;
     border-radius: 50%;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.50);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.60);
     margin: -4px;
     transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
                 box-shadow 140ms ease,
@@ -692,26 +689,26 @@ scale.volume-scale slider {
 }
 
 scale.volume-scale slider:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.70);
-    transform: scale(1.18);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.80);
+    transform: scale(1.20);
     background-color: #ffffff;
 }
 
 /* ==========================================================================
-   10. Settings & Account Cards — Honed Classical Slabs
+   10. Settings & Account Cards — Honed Modern Slabs
    ========================================================================== */
 
 .account-card {
-    background-color: #1a1815;
+    background-color: #181818;
     border-radius: 12px;
-    border: 1px solid rgba(235, 222, 205, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     padding: 20px 22px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .login-guide-box {
-    background-color: rgba(218, 119, 86, 0.06);
-    border-left: 3px solid #da7756;
+    background-color: rgba(255, 255, 255, 0.04);
+    border-left: 3px solid #ffffff;
     border-radius: 6px;
     padding: 14px 18px;
 }
@@ -721,20 +718,20 @@ scale.volume-scale slider:hover {
    ========================================================================== */
 
 popover {
-    background-color: #191714;
-    border: 1px solid rgba(218, 119, 86, 0.22);
+    background-color: #181818;
+    border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 12px;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85);
     padding: 0;
 }
 
 popover > arrow {
-    background-color: #191714;
-    border-color: rgba(218, 119, 86, 0.22);
+    background-color: #181818;
+    border-color: rgba(255, 255, 255, 0.16);
 }
 
 popover contents {
-    background-color: #191714;
+    background-color: #181818;
     border-radius: 12px;
     padding: 8px;
 }
@@ -747,8 +744,8 @@ popover contents {
 .context-menu-item {
     border-radius: 7px;
     padding: 7px 12px;
-    color: #f4efe6;
-    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', serif;
+    color: #f0f0f0;
+    font-family: 'Inter', 'Adwaita Sans', 'Noto Sans Arabic', sans-serif;
     font-size: 0.88rem;
     font-weight: 500;
     transition: background-color 120ms cubic-bezier(0.16, 1, 0.3, 1),
@@ -757,13 +754,13 @@ popover contents {
 }
 
 .context-menu-item:hover {
-    background-color: rgba(218, 119, 86, 0.16);
+    background-color: rgba(255, 255, 255, 0.12);
     color: #ffffff;
     transform: translateX(2px);
 }
 
 .context-menu-item:active {
-    background-color: rgba(218, 119, 86, 0.24);
+    background-color: rgba(255, 255, 255, 0.20);
     transform: translateX(1px);
 }
 
@@ -774,5 +771,5 @@ popover contents {
 }
 
 .queue-row:hover {
-    background-color: rgba(235, 222, 205, 0.06);
+    background-color: rgba(255, 255, 255, 0.06);
 }
