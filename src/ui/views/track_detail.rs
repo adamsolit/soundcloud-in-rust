@@ -83,7 +83,11 @@ impl TrackDetailView {
         let title_label = gtk::Label::builder()
             .label("Track Title")
             .css_classes(["brand-label"])
-            .halign(gtk::Align::Start)
+            .xalign(0.0)
+            .hexpand(true)
+            .wrap(true)
+            .wrap_mode(gtk::pango::WrapMode::WordChar)
+            .lines(2)
             .ellipsize(gtk::pango::EllipsizeMode::End)
             .build();
 

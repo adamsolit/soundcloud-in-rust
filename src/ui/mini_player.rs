@@ -77,7 +77,7 @@ impl MiniPlayerWindow {
         let title_lbl = gtk::Label::builder()
             .label("No track selected")
             .css_classes(["mini-player-title"])
-            .halign(gtk::Align::Start)
+            .xalign(0.0)
             .hexpand(true)
             .ellipsize(gtk::pango::EllipsizeMode::End)
             .build();
@@ -95,7 +95,7 @@ impl MiniPlayerWindow {
         let artist_lbl = gtk::Label::builder()
             .label("SoundCloud")
             .css_classes(["mini-player-artist"])
-            .halign(gtk::Align::Start)
+            .xalign(0.0)
             .ellipsize(gtk::pango::EllipsizeMode::End)
             .build();
 
@@ -188,7 +188,10 @@ impl MiniPlayerWindow {
     pub fn set_track(&self, track: &Track, samples: Vec<f32>) {
         *self.current_track.borrow_mut() = Some(track.clone());
         self.title_lbl.set_label(&track.title);
-        self.artist_lbl.set_label(track.artist_name());
+        self.title_lbl.set_tooltip_text(Some(&track.title));
+        let artist_str = track.artist_name();
+        self.artist_lbl.set_label(artist_str);
+        self.artist_lbl.set_tooltip_text(Some(artist_str));
         self.time_lbl.set_label(&format!("0:00 / {}", format_milliseconds(track.duration)));
 
         let art_url = track.thumbnail_url();

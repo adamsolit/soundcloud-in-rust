@@ -315,8 +315,13 @@ impl SearchView {
         let title_lbl = gtk::Label::builder()
             .label(&track.title)
             .css_classes(["track-card-title"])
-            .halign(gtk::Align::Start)
+            .xalign(0.0)
+            .hexpand(true)
+            .wrap(true)
+            .wrap_mode(gtk::pango::WrapMode::WordChar)
+            .lines(2)
             .ellipsize(gtk::pango::EllipsizeMode::End)
+            .tooltip_text(&track.title)
             .build();
 
         let artist_lbl = gtk::Label::builder()

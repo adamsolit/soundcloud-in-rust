@@ -123,17 +123,17 @@ impl PlayerBar {
         let title_label = gtk::Label::builder()
             .label("No track selected")
             .css_classes(["player-title"])
-            .halign(gtk::Align::Start)
+            .xalign(0.0)
             .ellipsize(gtk::pango::EllipsizeMode::End)
-            .max_width_chars(25)
+            .max_width_chars(50)
             .build();
 
         let artist_label = gtk::Label::builder()
             .label("SoundCloud")
             .css_classes(["player-artist"])
-            .halign(gtk::Align::Start)
+            .xalign(0.0)
             .ellipsize(gtk::pango::EllipsizeMode::End)
-            .max_width_chars(25)
+            .max_width_chars(35)
             .build();
 
         titles_vbox.append(&title_label);
@@ -814,7 +814,10 @@ impl PlayerBar {
     pub fn set_track(&self, track: &Track, samples: Vec<f32>) {
         *self.current_track.borrow_mut() = Some(track.clone());
         self.title_label.set_label(&track.title);
-        self.artist_label.set_label(track.artist_name());
+        self.title_label.set_tooltip_text(Some(&track.title));
+        let artist_str = track.artist_name();
+        self.artist_label.set_label(artist_str);
+        self.artist_label.set_tooltip_text(Some(artist_str));
         self.time_total.set_label(&track.duration_formatted());
         self.time_current.set_label("0:00");
 
@@ -1031,8 +1034,14 @@ impl PlayerBar {
             crate::ui::image_loader::load_into_image(&art, curr.thumbnail_url().as_deref(), "audio-x-generic-symbolic");
 
             let meta = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(2).hexpand(true).build();
-            let t_lbl = gtk::Label::builder().label(&curr.title).css_classes(["track-card-title"]).halign(gtk::Align::Start).ellipsize(gtk::pango::EllipsizeMode::End).build();
-            let a_lbl = gtk::Label::builder().label(curr.artist_name()).css_classes(["track-card-artist"]).halign(gtk::Align::Start).build();
+            let t_lbl = gtk::Label::builder()
+                .label(&curr.title)
+                .css_classes(["track-card-title"])
+                .xalign(0.0)
+                .ellipsize(gtk::pango::EllipsizeMode::End)
+                .tooltip_text(&curr.title)
+                .build();
+            let a_lbl = gtk::Label::builder().label(curr.artist_name()).css_classes(["track-card-artist"]).xalign(0.0).build();
             meta.append(&t_lbl);
             meta.append(&a_lbl);
 
@@ -1079,8 +1088,14 @@ impl PlayerBar {
             crate::ui::image_loader::load_into_image(&art, trk.thumbnail_url().as_deref(), "audio-x-generic-symbolic");
 
             let meta = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(2).hexpand(true).build();
-            let t_lbl = gtk::Label::builder().label(&trk.title).css_classes(["track-card-title"]).halign(gtk::Align::Start).ellipsize(gtk::pango::EllipsizeMode::End).build();
-            let a_lbl = gtk::Label::builder().label(trk.artist_name()).css_classes(["track-card-artist"]).halign(gtk::Align::Start).build();
+            let t_lbl = gtk::Label::builder()
+                .label(&trk.title)
+                .css_classes(["track-card-title"])
+                .xalign(0.0)
+                .ellipsize(gtk::pango::EllipsizeMode::End)
+                .tooltip_text(&trk.title)
+                .build();
+            let a_lbl = gtk::Label::builder().label(trk.artist_name()).css_classes(["track-card-artist"]).xalign(0.0).build();
             meta.append(&t_lbl);
             meta.append(&a_lbl);
 

@@ -153,7 +153,11 @@ impl PlaylistView {
         let detail_title = gtk::Label::builder()
             .label("Playlist Title")
             .css_classes(["brand-label"])
-            .halign(gtk::Align::Start)
+            .xalign(0.0)
+            .hexpand(true)
+            .wrap(true)
+            .wrap_mode(gtk::pango::WrapMode::WordChar)
+            .lines(2)
             .ellipsize(gtk::pango::EllipsizeMode::End)
             .build();
 
@@ -388,8 +392,13 @@ impl PlaylistView {
         let title_lbl = gtk::Label::builder()
             .label(&playlist.title)
             .css_classes(["track-card-title"])
-            .halign(gtk::Align::Start)
+            .xalign(0.0)
+            .hexpand(true)
+            .wrap(true)
+            .wrap_mode(gtk::pango::WrapMode::WordChar)
+            .lines(2)
             .ellipsize(gtk::pango::EllipsizeMode::End)
+            .tooltip_text(&playlist.title)
             .build();
 
         let count = playlist.track_count.unwrap_or(playlist.tracks.len() as u64);
@@ -541,8 +550,13 @@ impl PlaylistView {
         let title_lbl = gtk::Label::builder()
             .label(&track.title)
             .css_classes(["track-card-title"])
-            .halign(gtk::Align::Start)
+            .xalign(0.0)
+            .hexpand(true)
+            .wrap(true)
+            .wrap_mode(gtk::pango::WrapMode::WordChar)
+            .lines(2)
             .ellipsize(gtk::pango::EllipsizeMode::End)
+            .tooltip_text(&track.title)
             .build();
 
         let artist_lbl = gtk::Label::builder()

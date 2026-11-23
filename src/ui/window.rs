@@ -57,9 +57,17 @@ impl MainWindow {
             .vexpand(true)
             .build();
 
-        // Minimal HeaderBar
+        // Minimal HeaderBar with elegant centered brand title (preventing truncations)
+        let header_title = gtk::Label::builder()
+            .label("SoundCloud")
+            .css_classes(["header-brand-title"])
+            .halign(gtk::Align::Center)
+            .valign(gtk::Align::Center)
+            .hexpand(false)
+            .build();
+
         let header = adw::HeaderBar::builder()
-            .title_widget(&adw::WindowTitle::new("SoundCloud", ""))
+            .title_widget(&header_title)
             .show_end_title_buttons(true)
             .show_start_title_buttons(true)
             .build();
@@ -160,7 +168,7 @@ impl MainWindow {
 
         let view_stack = gtk::Stack::builder()
             .transition_type(gtk::StackTransitionType::Crossfade)
-            .transition_duration(150)
+            .transition_duration(200)
             .hexpand(true)
             .vexpand(true)
             .build();

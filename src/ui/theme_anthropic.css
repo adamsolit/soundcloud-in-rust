@@ -5,6 +5,7 @@
    - Deep warm basalt stone (#131210) & terracotta sienna (#da7756)
    - Classical inscriptional capitals (Cinzel) & Venetian editorial serifs (Libron / Arsenica)
    - Refined hairline borders, warm alabaster cream typography (#f4efe6)
+   - Tactile, physics-based micro-interactions with zero artificial glow
    ========================================================================== */
 
 * {
@@ -52,7 +53,16 @@ headerbar .title {
     font-weight: 600;
     font-size: 0.88rem;
     color: #f4efe6;
-    letter-spacing: 1.2px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+}
+
+.header-brand-title {
+    font-family: 'Cinzel', 'Noto Serif Display', serif;
+    font-weight: 600;
+    font-size: 0.90rem;
+    color: #f4efe6;
+    letter-spacing: 1.6px;
     text-transform: uppercase;
 }
 
@@ -65,17 +75,21 @@ headerbar .title {
     min-height: 34px;
     padding: 0;
     margin-left: 6px;
-    transition: all 140ms ease;
+    transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .header-profile-btn:hover {
     background-color: rgba(235, 222, 205, 0.08);
     border-color: rgba(218, 119, 86, 0.35);
+    transform: scale(1.04);
 }
 
 .header-profile-btn:active {
     background-color: rgba(218, 119, 86, 0.20);
     border-color: #da7756;
+    transform: scale(0.96);
 }
 
 .header-profile-avatar {
@@ -112,7 +126,7 @@ scrollbar slider {
     background-color: rgba(235, 222, 205, 0.14);
     border: none;
     margin: 2px;
-    transition: background-color 150ms ease;
+    transition: background-color 180ms ease;
 }
 
 scrollbar slider:hover {
@@ -128,7 +142,7 @@ scrollbar slider:hover {
     border-right: 1px solid rgba(235, 222, 205, 0.07);
     padding: 16px 10px;
     min-width: 164px;
-    transition: all 140ms ease;
+    transition: min-width 200ms cubic-bezier(0.16, 1, 0.3, 1), padding 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .sidebar-panel.collapsed {
@@ -162,12 +176,17 @@ scrollbar slider:hover {
     min-height: 24px;
     padding: 2px;
     color: #8f8475;
-    transition: all 120ms ease;
+    transition: color 140ms ease, background-color 140ms ease, transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn-sidebar-toggle:hover {
     background-color: rgba(235, 222, 205, 0.08);
     color: #f4efe6;
+    transform: scale(1.08);
+}
+
+.btn-sidebar-toggle:active {
+    transform: scale(0.92);
 }
 
 .nav-button {
@@ -181,7 +200,9 @@ scrollbar slider:hover {
     font-size: 0.82rem;
     letter-spacing: 0.8px;
     text-transform: uppercase;
-    transition: all 140ms ease;
+    transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .sidebar-panel.collapsed .nav-button {
@@ -191,6 +212,12 @@ scrollbar slider:hover {
 .nav-button:hover {
     background-color: rgba(235, 222, 205, 0.06);
     color: #f4efe6;
+    transform: translateX(2px);
+}
+
+.nav-button:active {
+    background-color: rgba(235, 222, 205, 0.12);
+    transform: translateX(1px);
 }
 
 .nav-button.active {
@@ -207,12 +234,15 @@ scrollbar slider:hover {
     border-radius: 10px;
     padding: 9px 12px;
     border: 1px solid rgba(218, 119, 86, 0.18);
-    transition: all 140ms ease;
+    transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .sidebar-user-pill:hover {
     background-color: #26221e;
     border-color: rgba(218, 119, 86, 0.35);
+    transform: translateY(-1px);
 }
 
 .badge-connected {
@@ -310,7 +340,7 @@ window.mini-player-window {
     font-weight: 600;
     font-size: 0.94rem;
     color: #f4efe6;
-    line-height: 1.28;
+    line-height: 1.34;
     letter-spacing: 0.2px;
 }
 
@@ -323,53 +353,60 @@ window.mini-player-window {
     text-transform: uppercase;
 }
 
-/* Hero Transport Controls */
+/* Hero Transport Controls — Matte Ceramic Terracotta */
 .btn-transport-play {
-    background: linear-gradient(135deg, #e07a5f 0%, #c86344 100%);
+    background: #d97757;
     color: #ffffff;
     border-radius: 50%;
-    min-width: 42px;
-    min-height: 42px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0;
-    border: none;
-    box-shadow: 0 4px 18px rgba(218, 119, 86, 0.40), 0 1px 3px rgba(0, 0, 0, 0.5);
-    transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.30);
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 140ms ease,
+                box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn-transport-play:hover {
-    background: linear-gradient(135deg, #e7876d 0%, #d46e4f 100%);
-    box-shadow: 0 6px 22px rgba(218, 119, 86, 0.55);
+    background: #e28263;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.55);
     transform: scale(1.05);
 }
 
 .btn-transport-play:active {
-    background: linear-gradient(135deg, #be583a 0%, #ac482d 100%);
+    background: #c56546;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.60);
     transform: scale(0.96);
 }
 
 .btn-pill-play {
-    background: linear-gradient(135deg, #e07a5f 0%, #c86344 100%);
+    background: #d97757;
     color: #ffffff;
     font-family: 'Cinzel', serif;
     letter-spacing: 1.0px;
     text-transform: uppercase;
     border-radius: 9999px;
-    padding: 8px 20px;
+    padding: 8px 22px;
     font-weight: 600;
     font-size: 0.82rem;
-    border: none;
-    box-shadow: 0 3px 14px rgba(218, 119, 86, 0.35);
-    transition: transform 120ms ease, box-shadow 120ms ease;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.40);
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 140ms ease,
+                box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn-pill-play:hover {
-    background: linear-gradient(135deg, #e7876d 0%, #d46e4f 100%);
-    box-shadow: 0 5px 18px rgba(218, 119, 86, 0.48);
+    background: #e28263;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.50);
     transform: translateY(-1px);
 }
 
 .btn-pill-play:active {
+    background: #c56546;
     transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 
 .btn-transport {
@@ -380,17 +417,25 @@ window.mini-player-window {
     min-width: 32px;
     min-height: 32px;
     padding: 0;
-    transition: color 120ms ease, background 120ms ease;
+    transition: color 140ms ease,
+                background-color 140ms ease,
+                transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn-transport:hover {
     color: #f4efe6;
     background: rgba(235, 222, 205, 0.08);
+    transform: scale(1.06);
+}
+
+.btn-transport:active {
+    background: rgba(235, 222, 205, 0.14);
+    transform: scale(0.94);
 }
 
 .btn-transport.active {
     color: #da7756;
-    background: rgba(218, 119, 86, 0.18);
+    background: rgba(218, 119, 86, 0.16);
 }
 
 .btn-heart-liked {
@@ -405,12 +450,19 @@ window.mini-player-window {
     padding: 2px 4px;
     min-width: 26px;
     min-height: 26px;
-    transition: all 120ms ease;
+    transition: color 140ms ease,
+                background-color 140ms ease,
+                transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn-card-like:hover {
     color: #da7756;
-    background: rgba(218, 119, 86, 0.12);
+    background: rgba(218, 119, 86, 0.14);
+    transform: scale(1.10);
+}
+
+.btn-card-like:active {
+    transform: scale(0.92);
 }
 
 .btn-card-like.btn-heart-liked {
@@ -437,39 +489,57 @@ window.mini-player-window {
     border-radius: 10px;
     border: 1px solid rgba(235, 222, 205, 0.07);
     padding: 12px 16px;
-    transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+    transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 160ms ease,
+                border-color 160ms ease,
+                box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .track-card:hover {
-    background-color: #221f1b;
-    border-color: rgba(218, 119, 86, 0.30);
-    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.50);
-    transform: translateY(-1px);
+    background-color: #211e1a;
+    border-color: rgba(218, 119, 86, 0.28);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    transform: translateY(-2px);
 }
 
 .track-card-artwork {
     border-radius: 7px;
     background-color: #211e1a;
     border: 1px solid rgba(235, 222, 205, 0.08);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 160ms ease;
+}
+
+.track-card:hover .track-card-artwork {
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.50);
 }
 
 .card-play-btn {
-    background: linear-gradient(135deg, #e07a5f 0%, #c86344 100%);
+    background: #d97757;
     color: #ffffff;
     border-radius: 50%;
-    box-shadow: 0 4px 16px rgba(218, 119, 86, 0.50);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 140ms ease;
 }
 
 .card-play-btn:hover {
-    background: linear-gradient(135deg, #e7876d 0%, #d46e4f 100%);
+    background: #e28263;
+    transform: scale(1.08);
+}
+
+.card-play-btn:active {
+    background: #c56546;
+    transform: scale(0.94);
 }
 
 .track-card-title {
-    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', serif;
+    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', 'Noto Naskh Arabic', serif;
     font-weight: 600;
-    font-size: 0.92rem;
+    font-size: 0.94rem;
     color: #f4efe6;
-    line-height: 1.28;
+    line-height: 1.38;
     letter-spacing: 0.15px;
 }
 
@@ -505,21 +575,30 @@ window.mini-player-window {
     border-radius: 8px;
     padding: 7px 16px;
     color: #bfae9b;
-    transition: all 140ms ease;
+    transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                color 160ms ease,
+                transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 160ms ease;
 }
 
 .filter-chip:hover {
     background-color: #26221e;
-    border-color: rgba(218, 119, 86, 0.35);
+    border-color: rgba(218, 119, 86, 0.32);
     color: #f4efe6;
+    transform: translateY(-1px);
+}
+
+.filter-chip:active {
+    transform: translateY(0);
 }
 
 .filter-chip.active {
-    background: linear-gradient(135deg, #e07a5f 0%, #c86344 100%);
-    border-color: #da7756;
+    background: #d97757;
+    border: 1px solid #da7756;
     color: #ffffff;
     font-weight: 700;
-    box-shadow: 0 3px 14px rgba(218, 119, 86, 0.40);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
 /* ==========================================================================
@@ -532,15 +611,17 @@ window.mini-player-window {
     border-radius: 10px;
     padding: 9px 16px;
     color: #f4efe6;
-    font-family: 'Libron', 'Adwaita Sans', serif;
+    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', 'Adwaita Sans', serif;
     font-size: 0.88rem;
-    transition: all 140ms ease;
+    transition: border-color 160ms ease,
+                background-color 160ms ease,
+                box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .sc-search-entry:focus-within {
     background-color: #201d19;
     border-color: #da7756;
-    box-shadow: 0 0 0 1px rgba(218, 119, 86, 0.35), 0 4px 18px rgba(0, 0, 0, 0.40);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 /* ==========================================================================
@@ -570,12 +651,15 @@ window.mini-player-window {
     border-radius: 14px;
     background-color: rgba(218, 119, 86, 0.03);
     padding: 44px 24px;
-    transition: all 140ms ease;
+    transition: border-color 160ms ease,
+                background-color 160ms ease,
+                transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .upload-dropzone:hover {
     border-color: #da7756;
     background-color: rgba(218, 119, 86, 0.07);
+    transform: scale(1.01);
 }
 
 /* ==========================================================================
@@ -600,14 +684,17 @@ scale.volume-scale slider {
     min-width: 12px;
     min-height: 12px;
     border-radius: 50%;
-    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.50);
     margin: -4px;
-    transition: all 120ms ease;
+    transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 140ms ease,
+                background-color 140ms ease;
 }
 
 scale.volume-scale slider:hover {
-    box-shadow: 0 0 10px rgba(218, 119, 86, 0.60);
-    transform: scale(1.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.70);
+    transform: scale(1.18);
+    background-color: #ffffff;
 }
 
 /* ==========================================================================
@@ -634,20 +721,20 @@ scale.volume-scale slider:hover {
    ========================================================================== */
 
 popover {
-    background-color: #1a1714;
-    border: 1px solid rgba(218, 119, 86, 0.28);
+    background-color: #191714;
+    border: 1px solid rgba(218, 119, 86, 0.22);
     border-radius: 12px;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85);
     padding: 0;
 }
 
 popover > arrow {
-    background-color: #1a1714;
-    border-color: rgba(218, 119, 86, 0.28);
+    background-color: #191714;
+    border-color: rgba(218, 119, 86, 0.22);
 }
 
 popover contents {
-    background-color: #1a1714;
+    background-color: #191714;
     border-radius: 12px;
     padding: 8px;
 }
@@ -661,25 +748,29 @@ popover contents {
     border-radius: 7px;
     padding: 7px 12px;
     color: #f4efe6;
-    font-family: 'Libron', 'Adwaita Sans', serif;
+    font-family: 'Libron', 'Arsenica Arabic Antiqua Trial', serif;
     font-size: 0.88rem;
     font-weight: 500;
-    transition: all 120ms ease;
+    transition: background-color 120ms cubic-bezier(0.16, 1, 0.3, 1),
+                color 120ms ease,
+                transform 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .context-menu-item:hover {
-    background-color: rgba(218, 119, 86, 0.18);
-    color: #f4efe6;
+    background-color: rgba(218, 119, 86, 0.16);
+    color: #ffffff;
+    transform: translateX(2px);
 }
 
 .context-menu-item:active {
-    background-color: rgba(218, 119, 86, 0.28);
+    background-color: rgba(218, 119, 86, 0.24);
+    transform: translateX(1px);
 }
 
 .queue-row {
     border-radius: 8px;
-    padding: 5px 8px;
-    transition: background-color 100ms ease;
+    padding: 6px 8px;
+    transition: background-color 140ms ease;
 }
 
 .queue-row:hover {
