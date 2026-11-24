@@ -58,10 +58,11 @@ fn main() {
                     }
                 }
 
-                // Register bundled fonts into Windows process font table
+                // Register bundled fonts and configure Fontconfig for Linux-identical text & Arabic shaping
                 let fonts_dir = dir.join("share").join("fonts");
                 if fonts_dir.exists() {
                     load_bundled_fonts(&fonts_dir);
+                    configure_windows_fontconfig(dir, &fonts_dir);
                 }
             }
         }
@@ -138,6 +139,61 @@ fn load_bundled_fonts(fonts_dir: &std::path::Path) {
                 }
             }
         }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn configure_windows_fontconfig(exe_dir: &std::path::Path, fonts_dir: &std::path::Path) {
+    let etc_fonts_dir = exe_dir.join("etc").join("fonts");
+    if !etc_fonts_dir.exists() {
+        return;
+    }
+
+    let fc_dir = cloudpulse::paths::data_dir().join("fontconfig");
+    if std::fs::create_dir_all(&fc_dir).is_err() {
+        return;
+    }
+
+    let escape_xml = |s: &str| {
+        s.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+    };
+
+    let mut conf = String::from(
+        "<?xml version=\"1.0\"?>\n<!DOCTYPE fontconfig SYSTEM \"urn:fontconfig:fonts.dtd\">\n<fontconfig>\n",
+    );
+    conf.push_str(&format!(
+        "  <dir>{}</dir>\n",
+        escape_xml(&fonts_dir.to_string_lossy())
+    ));
+
+    let main_conf = etc_fonts_dir.join("fonts.conf");
+    if main_conf.exists() {
+        conf.push_str(&format!(
+            "  <include ignore_missing=\"yes\">{}</include>\n",
+            escape_xml(&main_conf.to_string_lossy())
+        ));
+    }
+    let conf_d = etc_fonts_dir.join("conf.d");
+    if conf_d.exists() {
+        conf.push_str(&format!(
+            "  <include ignore_missing=\"yes\">{}</include>\n",
+            escape_xml(&conf_d.to_string_lossy())
+        ));
+    }
+    conf.push_str("</fontconfig>\n");
+
+    if std::fs::write(fc_dir.join("fonts.conf"), conf).is_ok() {
+        unsafe {
+            if std::env::var_os("FONTCONFIG_PATH").is_none() {
+                std::env::set_var("FONTCONFIG_PATH", &fc_dir);
+            }
+            if std::env::var_os("PANGOCAIRO_BACKEND").is_none() {
+                std::env::set_var("PANGOCAIRO_BACKEND", "fc");
+            }
+        }
+        info!("Configured Fontconfig PangoCairo backend at {:?}", fc_dir);
     }
 }
 

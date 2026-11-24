@@ -32,6 +32,11 @@ if [ -d /tmp/bundled-fonts ]; then
   cp /tmp/bundled-fonts/* "$DIST_DIR/share/fonts/" 2>/dev/null || true
 fi
 
+if [ -d "$SYSROOT/etc/fonts" ]; then
+  mkdir -p "$DIST_DIR/etc"
+  cp -r "$SYSROOT/etc/fonts" "$DIST_DIR/etc/"
+fi
+
 mkdir -p "$DIST_DIR/lib/gdk-pixbuf-2.0/2.10.0/loaders"
 if [ -f "$SYSROOT/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache" ]; then
   cp "$SYSROOT/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache" "$DIST_DIR/lib/gdk-pixbuf-2.0/2.10.0/"

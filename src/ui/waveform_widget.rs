@@ -97,7 +97,13 @@ impl WaveformWidget {
         let comments_clone = Rc::clone(&comments);
         let bookmarks_clone = Rc::clone(&bookmarks);
 
-        drawing_area.set_draw_func(move |_area, cr, width_i, height_i| {
+        let mut pill_font_desc = gtk::pango::FontDescription::from_string(
+            "Inter, Adwaita Sans, Noto Sans Arabic, Cairo, Segoe UI, Tahoma, sans-serif",
+        );
+        pill_font_desc.set_weight(gtk::pango::Weight::Bold);
+        pill_font_desc.set_absolute_size(9.5 * gtk::pango::SCALE as f64);
+
+        drawing_area.set_draw_func(move |area, cr, width_i, height_i| {
             let w = width_i as f64;
             let h = height_i as f64;
             if w <= 10.0 || h <= 5.0 {
@@ -254,48 +260,45 @@ impl WaveformWidget {
                 let dur = *duration_clone.borrow();
                 if dur > 0 {
                     let hover_sec = (hov * dur as f64 / 1000.0) as u64;
-                    let mins = hover_sec / 60;
-                    let secs = hover_sec % 60;
-                    let mut time_str = format!("{}:{:02}", mins, secs);
+                    let time_str = format_hover_pill_text(hover_sec, hov, &bookmarks);
 
-                    for item in bookmarks.iter() {
-                        let bm_pct: f64 = item.0;
-                        let note: &str = item.1.as_str();
-                        if f64::abs(hov - bm_pct) < 0.015 {
-                            let clean_note = if note.chars().count() > 18 {
-                                format!("{}...", note.chars().take(18).collect::<String>())
-                            } else {
-                                note.to_string()
-                            };
-                            time_str = format!("{} • {}", time_str, clean_note);
-                            break;
-                        }
-                    }
+                    let layout = area.create_pango_layout(Some(&time_str));
+                    layout.set_font_description(Some(&pill_font_desc));
+                    pangocairo::functions::update_layout(cr, &layout);
 
-                    cr.set_font_size(9.0);
-                    cr.select_font_face("Inter", gtk::cairo::FontSlant::Normal, gtk::cairo::FontWeight::Bold);
-                    if let Ok(ext) = cr.text_extents(&time_str) {
-                        let pill_w = ext.width() + 10.0;
-                        let pill_h = ext.height() + 5.0;
-                        let pill_x = (hov_x - pill_w * 0.5).clamp(2.0, (w - pill_w - 2.0).max(2.0));
-                        let pill_y = 1.0;
+                    let (ink, logical) = layout.extents();
+                    let pango_scale = gtk::pango::SCALE as f64;
+                    let ink_x = ink.x() as f64 / pango_scale;
+                    let ink_y = ink.y() as f64 / pango_scale;
+                    let ink_w = ink.width() as f64 / pango_scale;
+                    let ink_h = ink.height() as f64 / pango_scale;
+                    let log_w = logical.width() as f64 / pango_scale;
 
-                        // Pill background
-                        cr.set_source_rgba(colors.pill_bg.0, colors.pill_bg.1, colors.pill_bg.2, colors.pill_bg.3);
-                        cr.rectangle(pill_x, pill_y, pill_w, pill_h);
-                        let _ = cr.fill();
+                    let text_w = log_w.max(ink_w);
+                    let pad_x = 5.5;
+                    let pad_y = 3.0;
+                    let pill_w = text_w + pad_x * 2.0;
+                    let pill_h = (ink_h + pad_y * 2.0).max(14.0);
+                    let pill_x = (hov_x - pill_w * 0.5).clamp(2.0, (w - pill_w - 2.0).max(2.0));
+                    let pill_y = 1.0;
 
-                        // Pill crisp 1px border
-                        cr.set_source_rgba(colors.pill_border.0, colors.pill_border.1, colors.pill_border.2, colors.pill_border.3);
-                        cr.set_line_width(0.75);
-                        cr.rectangle(pill_x, pill_y, pill_w, pill_h);
-                        let _ = cr.stroke();
+                    // Pill background
+                    cr.set_source_rgba(colors.pill_bg.0, colors.pill_bg.1, colors.pill_bg.2, colors.pill_bg.3);
+                    cr.rectangle(pill_x, pill_y, pill_w, pill_h);
+                    let _ = cr.fill();
 
-                        // Time text
-                        cr.set_source_rgb(colors.pill_text.0, colors.pill_text.1, colors.pill_text.2);
-                        cr.move_to(pill_x + 5.0, pill_y + pill_h - 2.5);
-                        let _ = cr.show_text(&time_str);
-                    }
+                    // Pill crisp 1px border
+                    cr.set_source_rgba(colors.pill_border.0, colors.pill_border.1, colors.pill_border.2, colors.pill_border.3);
+                    cr.set_line_width(0.75);
+                    cr.rectangle(pill_x, pill_y, pill_w, pill_h);
+                    let _ = cr.stroke();
+
+                    // Time and bookmark text via PangoCairo (supports Arabic, RTL BiDi, and font fallback)
+                    cr.set_source_rgb(colors.pill_text.0, colors.pill_text.1, colors.pill_text.2);
+                    let draw_x = pill_x + pad_x - ink_x.min(0.0);
+                    let draw_y = pill_y + (pill_h - ink_h) * 0.5 - ink_y;
+                    cr.move_to(draw_x, draw_y);
+                    pangocairo::functions::show_layout(cr, &layout);
                 }
             }
         });
@@ -448,5 +451,44 @@ impl WaveformWidget {
         F: Fn(f64) + 'static,
     {
         *self.seek_callback.borrow_mut() = Some(Box::new(callback));
+    }
+}
+
+fn format_hover_pill_text(hover_sec: u64, hov: f64, bookmarks: &[(f64, String, i64)]) -> String {
+    let mins = hover_sec / 60;
+    let secs = hover_sec % 60;
+    let base_time = format!("{}:{:02}", mins, secs);
+
+    for (bm_pct, note, _) in bookmarks {
+        if f64::abs(hov - *bm_pct) < 0.015 {
+            let clean_note = if note.chars().count() > 18 {
+                format!("{}...", note.chars().take(18).collect::<String>())
+            } else {
+                note.to_string()
+            };
+            // LRM anchors timestamp left while FSI/PDI isolates RTL/mixed bookmark notes.
+            return format!("\u{200E}{} • \u{2068}{}\u{2069}", base_time, clean_note);
+        }
+    }
+
+    base_time
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_hover_pill_text;
+
+    #[test]
+    fn test_hover_pill_plain_time() {
+        assert_eq!(format_hover_pill_text(76 * 60 + 40, 0.5, &[]), "76:40");
+    }
+
+    #[test]
+    fn test_hover_pill_arabic_bookmark_truncation() {
+        let bookmarks = vec![(0.5, "بداية المقطع الثاني والختام الطويل".to_string(), 1)];
+        let rendered = format_hover_pill_text(76 * 60 + 40, 0.501, &bookmarks);
+        assert!(rendered.starts_with("\u{200E}76:40 • \u{2068}"));
+        assert!(rendered.ends_with("...\u{2069}"));
+        assert!(rendered.contains("بداية المقطع"));
     }
 }
