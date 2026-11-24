@@ -32,6 +32,7 @@ pub struct TrackDetailView {
     current_position_ms: Rc<RefCell<u64>>,
     on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>>,
     on_seek: Rc<RefCell<Option<Box<dyn Fn(f64)>>>>,
+    on_jump_timestamp: Rc<RefCell<Option<Box<dyn Fn(Track, u64)>>>>,
     on_post_comment: Rc<RefCell<Option<Box<dyn Fn(u64, String, u64)>>>>,
     on_select_user: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
     on_add_bookmark: Rc<RefCell<Option<Box<dyn Fn(u64, u64, String)>>>>,
@@ -285,6 +286,7 @@ impl TrackDetailView {
         let current_position_ms = Rc::new(RefCell::new(0));
         let on_play_track: Rc<RefCell<Option<Box<dyn Fn(Track)>>>> = Rc::new(RefCell::new(None));
         let on_seek: Rc<RefCell<Option<Box<dyn Fn(f64)>>>> = Rc::new(RefCell::new(None));
+        let on_jump_timestamp: Rc<RefCell<Option<Box<dyn Fn(Track, u64)>>>> = Rc::new(RefCell::new(None));
         let on_post_comment: Rc<RefCell<Option<Box<dyn Fn(u64, String, u64)>>>> = Rc::new(RefCell::new(None));
         let on_select_user: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
         let on_add_bookmark: Rc<RefCell<Option<Box<dyn Fn(u64, u64, String)>>>> = Rc::new(RefCell::new(None));
@@ -400,6 +402,7 @@ impl TrackDetailView {
             current_position_ms,
             on_play_track,
             on_seek,
+            on_jump_timestamp,
             on_post_comment,
             on_select_user,
             on_add_bookmark,
@@ -413,6 +416,7 @@ impl TrackDetailView {
     }
 
     pub fn set_track(&self, track: Track, samples: Vec<f32>) {
+        let switched_track = self.current_track.borrow().as_ref().map(|t| t.id) != Some(track.id);
         *self.current_track.borrow_mut() = Some(track.clone());
         self.title_label.set_label(&track.title);
         self.artist_label.set_label(track.artist_name());
@@ -427,8 +431,11 @@ impl TrackDetailView {
         );
 
         self.waveform.set_samples(samples);
-        self.waveform.set_progress(0.0);
         self.waveform.set_duration_ms(track.duration);
+        if switched_track {
+            self.waveform.set_progress(0.0);
+            self.update_position(0, track.duration);
+        }
     }
 
     pub fn update_position(&self, position_ms: u64, duration_ms: u64) {
@@ -551,20 +558,33 @@ impl TrackDetailView {
 
         // Click comment to seek to its timestamp
         if let Some(ts) = comment.timestamp {
-            let click_g = gtk::GestureClick::new();
-            let seek_cb = Rc::clone(&self.on_seek);
-            click_g.connect_pressed(move |_g, _n, _x, _y| {
-                if duration_ms > 0 {
-                    let pct = (ts as f64 / duration_ms as f64).clamp(0.0, 1.0);
-                    if let Some(ref cb) = *seek_cb.borrow() {
-                        cb(pct);
-                    }
-                }
-            });
-            row.add_controller(click_g);
+            self.attach_jump_handler(&row, ts, duration_ms);
         }
 
         row
+    }
+
+    fn attach_jump_handler(&self, widget: &impl IsA<gtk::Widget>, ts_ms: u64, duration_ms: u64) {
+        widget.set_cursor_from_name(Some("pointer"));
+        let click_g = gtk::GestureClick::new();
+        let jump_cb = Rc::clone(&self.on_jump_timestamp);
+        let seek_cb = Rc::clone(&self.on_seek);
+        let track_ref = Rc::clone(&self.current_track);
+        click_g.connect_released(move |_g, _n, _x, _y| {
+            if let Some(ref track) = *track_ref.borrow() {
+                if let Some(ref cb) = *jump_cb.borrow() {
+                    cb(track.clone(), ts_ms);
+                    return;
+                }
+            }
+            if duration_ms > 0 {
+                let pct = (ts_ms as f64 / duration_ms as f64).clamp(0.0, 1.0);
+                if let Some(ref cb) = *seek_cb.borrow() {
+                    cb(pct);
+                }
+            }
+        });
+        widget.add_controller(click_g);
     }
 
     pub fn connect_play_track<F: Fn(Track) + 'static>(&self, f: F) {
@@ -573,6 +593,10 @@ impl TrackDetailView {
 
     pub fn connect_seek<F: Fn(f64) + 'static>(&self, f: F) {
         *self.on_seek.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_jump_timestamp<F: Fn(Track, u64) + 'static>(&self, f: F) {
+        *self.on_jump_timestamp.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_post_comment<F: Fn(u64, String, u64) + 'static>(&self, f: F) {
@@ -630,22 +654,19 @@ impl TrackDetailView {
                 .margin_end(6)
                 .build();
 
-            let ts_btn = gtk::Button::builder()
-                .label(&format_milliseconds(bm.timestamp_ms))
+            let ts_str = format_milliseconds(bm.timestamp_ms);
+            let jump_box = gtk::Box::builder()
+                .orientation(gtk::Orientation::Horizontal)
+                .spacing(12)
+                .hexpand(true)
+                .tooltip_text(format!("Jump to {}", ts_str))
+                .build();
+
+            let ts_badge = gtk::Label::builder()
+                .label(&ts_str)
                 .css_classes(["filter-chip", "active"])
                 .valign(gtk::Align::Center)
                 .build();
-
-            let seek_cb = Rc::clone(&self.on_seek);
-            let ts_ms = bm.timestamp_ms;
-            ts_btn.connect_clicked(move |_| {
-                if duration_ms > 0 {
-                    let pct = (ts_ms as f64 / duration_ms as f64).clamp(0.0, 1.0);
-                    if let Some(ref cb) = *seek_cb.borrow() {
-                        cb(pct);
-                    }
-                }
-            });
 
             let note_lbl = gtk::Label::builder()
                 .label(&bm.note)
@@ -660,6 +681,11 @@ impl TrackDetailView {
                 .css_classes(["time-label"])
                 .halign(gtk::Align::End)
                 .build();
+
+            jump_box.append(&ts_badge);
+            jump_box.append(&note_lbl);
+            jump_box.append(&time_lbl);
+            self.attach_jump_handler(&jump_box, bm.timestamp_ms, duration_ms);
 
             let del_btn = gtk::Button::builder()
                 .icon_name("user-trash-symbolic")
@@ -676,9 +702,7 @@ impl TrackDetailView {
                 }
             });
 
-            row.append(&ts_btn);
-            row.append(&note_lbl);
-            row.append(&time_lbl);
+            row.append(&jump_box);
             row.append(&del_btn);
             self.bookmarks_list.append(&row);
         }
@@ -694,6 +718,10 @@ impl TrackDetailView {
 
     pub fn connect_stash<F: Fn() + 'static>(&self, f: F) {
         *self.on_stash_toggle.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn current_track(&self) -> Option<Track> {
+        self.current_track.borrow().clone()
     }
 
     pub fn current_track_id(&self) -> Option<u64> {

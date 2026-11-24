@@ -899,14 +899,7 @@ impl Application {
             if let Some(ref track) = *state_bm_save.current_track.borrow() {
                 let clean_note = if note.trim().is_empty() { "Bookmark".to_string() } else { note.trim().to_string() };
                 let _ = state_bm_save.db.add_bookmark(track.id, pos_ms, &clean_note);
-                if let Ok(bms) = state_bm_save.db.get_bookmarks(track.id) {
-                    let dur = track.duration.max(1);
-                    let markers: Vec<(f64, String, i64)> = bms.iter()
-                        .map(|b| ((b.timestamp_ms as f64 / dur as f64).clamp(0.0, 1.0), b.note.clone(), b.id))
-                        .collect();
-                    win_bm_save.player_bar().waveform().set_bookmarks(markers);
-                    win_bm_save.track_detail_view.set_bookmarks(bms, dur);
-                }
+                refresh_bookmarks_ui(&state_bm_save, &win_bm_save, track.id, track.duration);
             }
         });
 
@@ -1514,24 +1507,28 @@ impl Application {
             });
         });
 
-        let audio_td_seek = Arc::clone(&self.state.audio);
         let win_td_seek = Rc::clone(&self.window);
         let state_td_seek = Rc::clone(&self.state);
         self.window.track_detail_view.connect_seek(move |pct| {
-            let dur = audio_td_seek.get_duration_ms();
-            if dur > 0 {
-                let target_ms = (pct * dur as f64) as u64;
-                let _ = audio_td_seek.seek(target_ms);
-                win_td_seek.player_bar().update_position(target_ms, dur);
-                win_td_seek.mini_player().update_position(target_ms, dur);
-                win_td_seek.track_detail_view.update_position(target_ms, dur);
-                let m_c = Rc::clone(&state_td_seek.mpris);
-                glib::spawn_future_local(async move {
-                    if let Some(ref m) = *m_c.borrow() {
-                        m.emit_seeked(target_ms * 1000).await;
-                    }
-                });
+            if let Some(detail_track) = win_td_seek.track_detail_view.current_track() {
+                let is_loaded = state_td_seek.current_track.borrow().as_ref().map(|t| t.id) == Some(detail_track.id)
+                    && state_td_seek.audio.is_loaded();
+                let dur = if is_loaded {
+                    state_td_seek.audio.get_duration_ms().max(detail_track.duration)
+                } else {
+                    detail_track.duration
+                };
+                if dur > 0 {
+                    let target_ms = (pct.clamp(0.0, 1.0) * dur as f64) as u64;
+                    jump_to_track_position(&state_td_seek, &win_td_seek, detail_track, target_ms, false);
+                }
             }
+        });
+
+        let win_td_jump = Rc::clone(&self.window);
+        let state_td_jump = Rc::clone(&self.state);
+        self.window.track_detail_view.connect_jump_timestamp(move |track, target_ms| {
+            jump_to_track_position(&state_td_jump, &win_td_jump, track, target_ms, true);
         });
 
         let s_td_post = Rc::clone(&state_c);
@@ -1568,39 +1565,36 @@ impl Application {
         let w_td_bm = Rc::clone(&win_c);
         self.window.track_detail_view.connect_add_bookmark(move |track_id, timestamp_ms, note| {
             let _ = s_td_bm.db.add_bookmark(track_id, timestamp_ms, &note);
-            let dur = s_td_bm.audio.get_duration_ms();
-            if let Ok(bms) = s_td_bm.db.get_bookmarks(track_id) {
-                w_td_bm.track_detail_view.set_bookmarks(bms.clone(), dur);
-                let markers: Vec<(f64, String, i64)> = bms.into_iter().map(|b| {
-                    let pct = if dur > 0 { (b.timestamp_ms as f64 / dur as f64).clamp(0.0, 1.0) } else { 0.0 };
-                    (pct, b.note, b.id)
-                }).collect();
-                w_td_bm.player_bar().waveform().set_bookmarks(markers);
-            }
+            let fallback_dur = w_td_bm
+                .track_detail_view
+                .current_track()
+                .map(|t| t.duration)
+                .unwrap_or(0);
+            refresh_bookmarks_ui(&s_td_bm, &w_td_bm, track_id, fallback_dur);
         });
 
         let s_td_del_bm = Rc::clone(&state_c);
         let w_td_del_bm = Rc::clone(&win_c);
         self.window.track_detail_view.connect_delete_bookmark(move |bookmark_id| {
             let _ = s_td_del_bm.db.delete_bookmark(bookmark_id);
-            if let Some(ref track) = *s_td_del_bm.current_track.borrow() {
-                let dur = s_td_del_bm.audio.get_duration_ms();
-                if let Ok(bms) = s_td_del_bm.db.get_bookmarks(track.id) {
-                    w_td_del_bm.track_detail_view.set_bookmarks(bms.clone(), dur);
-                    let markers: Vec<(f64, String, i64)> = bms.into_iter().map(|b| {
-                        let pct = if dur > 0 { (b.timestamp_ms as f64 / dur as f64).clamp(0.0, 1.0) } else { 0.0 };
-                        (pct, b.note, b.id)
-                    }).collect();
-                    w_td_del_bm.player_bar().waveform().set_bookmarks(markers);
-                }
+            if let Some(track) = w_td_del_bm
+                .track_detail_view
+                .current_track()
+                .or_else(|| s_td_del_bm.current_track.borrow().clone())
+            {
+                refresh_bookmarks_ui(&s_td_del_bm, &w_td_del_bm, track.id, track.duration);
             }
         });
 
         let s_td_stash = Rc::clone(&state_c);
         let w_td_stash = Rc::clone(&win_c);
         self.window.track_detail_view.connect_stash(move || {
-            if let Some(ref track) = *s_td_stash.current_track.borrow() {
-                handle_toggle_stash_internal(&s_td_stash, &w_td_stash, track.clone());
+            if let Some(track) = w_td_stash
+                .track_detail_view
+                .current_track()
+                .or_else(|| s_td_stash.current_track.borrow().clone())
+            {
+                handle_toggle_stash_internal(&s_td_stash, &w_td_stash, track);
             }
         });
 
@@ -2223,6 +2217,9 @@ async fn play_track_internal_with_seek(
     if seek_to_ms > 0 {
         window.player_bar().update_position(seek_to_ms, track.duration);
         window.mini_player().update_position(seek_to_ms, track.duration);
+        if window.track_detail_view.current_track_id() == Some(track.id) {
+            window.track_detail_view.update_position(seek_to_ms, track.duration);
+        }
     }
     window.player_bar().update_playback_state(true);
     window.mini_player().update_playback_state(true);
@@ -2309,6 +2306,83 @@ async fn play_track_internal_with_seek(
     Ok(())
 }
 
+fn refresh_bookmarks_ui(state: &Rc<AppState>, window: &Rc<MainWindow>, track_id: u64, fallback_dur: u64) {
+    let audio_dur = if state.current_track.borrow().as_ref().map(|t| t.id) == Some(track_id) {
+        state.audio.get_duration_ms()
+    } else {
+        0
+    };
+    let dur = audio_dur.max(fallback_dur);
+    if let Ok(bms) = state.db.get_bookmarks(track_id) {
+        if window.track_detail_view.current_track_id() == Some(track_id) {
+            window.track_detail_view.set_bookmarks(bms.clone(), dur);
+        }
+        if state.current_track.borrow().as_ref().map(|t| t.id) == Some(track_id) {
+            let markers: Vec<(f64, String, i64)> = bms
+                .into_iter()
+                .map(|b| {
+                    let pct = if dur > 0 {
+                        (b.timestamp_ms as f64 / dur as f64).clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    (pct, b.note, b.id)
+                })
+                .collect();
+            window.player_bar().waveform().set_bookmarks(markers);
+        }
+    }
+}
+
+fn jump_to_track_position(
+    state: &Rc<AppState>,
+    window: &Rc<MainWindow>,
+    track: Track,
+    target_ms: u64,
+    resume_if_paused: bool,
+) {
+    let same_loaded_track = state.current_track.borrow().as_ref().map(|t| t.id) == Some(track.id)
+        && state.audio.is_loaded()
+        && state.pending_resume_pos.borrow().is_none();
+
+    if same_loaded_track {
+        let dur = state.audio.get_duration_ms().max(track.duration);
+        if dur > 0 {
+            let clamped_ms = target_ms.min(dur);
+            let _ = state.audio.seek(clamped_ms);
+            if resume_if_paused && state.audio.get_state() == crate::audio::types::PlaybackState::Paused {
+                state.audio.resume();
+                window.player_bar().update_playback_state(true);
+                window.mini_player().update_playback_state(true);
+            }
+            window.player_bar().update_position(clamped_ms, dur);
+            window.mini_player().update_position(clamped_ms, dur);
+            if window.track_detail_view.current_track_id() == Some(track.id) {
+                window.track_detail_view.update_position(clamped_ms, dur);
+            }
+            let m_c = Rc::clone(&state.mpris);
+            glib::spawn_future_local(async move {
+                if let Some(ref m) = *m_c.borrow() {
+                    m.emit_seeked(clamped_ms * 1000).await;
+                }
+            });
+            return;
+        }
+    }
+
+    state.pending_resume_pos.borrow_mut().take();
+    window.player_bar().update_position(target_ms, track.duration);
+    window.mini_player().update_position(target_ms, track.duration);
+    if window.track_detail_view.current_track_id() == Some(track.id) {
+        window.track_detail_view.update_position(target_ms, track.duration);
+    }
+    let s = Rc::clone(state);
+    let w = Rc::clone(window);
+    glib::spawn_future_local(async move {
+        let _ = play_track_internal_with_seek(&s, &w, track, target_ms).await;
+    });
+}
+
 fn show_track_detail_internal(
     state: &Rc<AppState>,
     window: &Rc<MainWindow>,
@@ -2328,6 +2402,18 @@ fn show_track_detail_internal(
 
         win_c.track_detail_view.set_track(track, samples);
         win_c.show_view("track_detail");
+
+        if s_c.current_track.borrow().as_ref().map(|t| t.id) == Some(track_id) {
+            let pos = if s_c.audio.is_loaded() {
+                s_c.audio.get_position_ms()
+            } else {
+                s_c.pending_resume_pos.borrow().unwrap_or(0)
+            };
+            let active_dur = s_c.audio.get_duration_ms().max(dur);
+            if active_dur > 0 {
+                win_c.track_detail_view.update_position(pos, active_dur);
+            }
+        }
 
         // Load personal bookmarks and stash state for track
         if let Ok(bms) = s_c.db.get_bookmarks(track_id) {
@@ -2411,17 +2497,7 @@ fn handle_add_bookmark_quick(state: &Rc<AppState>, window: &Rc<MainWindow>, note
     if let Some(ref track) = *state.current_track.borrow() {
         let pos = state.audio.get_position_ms();
         let _ = state.db.add_bookmark(track.id, pos, note);
-        let dur = track.duration;
-        if let Ok(bms) = state.db.get_bookmarks(track.id) {
-            let markers: Vec<(f64, String, i64)> = bms.iter().map(|b| {
-                let pct = if dur > 0 { (b.timestamp_ms as f64 / dur as f64).clamp(0.0, 1.0) } else { 0.0 };
-                (pct, b.note.clone(), b.id)
-            }).collect();
-            window.player_bar().waveform().set_bookmarks(markers);
-            if window.track_detail_view.widget().is_visible() {
-                window.track_detail_view.set_bookmarks(bms, dur);
-            }
-        }
+        refresh_bookmarks_ui(state, window, track.id, track.duration);
     }
 }
 
