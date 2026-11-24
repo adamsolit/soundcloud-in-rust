@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use cloudpulse::app;
 use cloudpulse::ui;
 use libadwaita as adw;
@@ -17,7 +19,55 @@ fn main() {
         )
         .init();
 
-    // Create and enter Tokio multi-threaded runtime context with capped worker threads for low memory footprint
+    // Windows startup environment setup
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                // Ensure PATH contains the application folder so mpv.exe and all DLLs are resolved
+                if let Some(path) = std::env::var_os("PATH") {
+                    let mut paths = std::env::split_paths(&path).collect::<Vec<_>>();
+                    paths.insert(0, dir.to_path_buf());
+                    if let Ok(new_path) = std::env::join_paths(paths) {
+                        unsafe {
+                            std::env::set_var("PATH", new_path);
+                        }
+                    }
+                }
+
+                // GSettings Schemas
+                let schema_dir = dir.join("share").join("glib-2.0").join("schemas");
+                if schema_dir.exists() && std::env::var_os("GSETTINGS_SCHEMA_DIR").is_none() {
+                    unsafe {
+                        std::env::set_var("GSETTINGS_SCHEMA_DIR", &schema_dir);
+                    }
+                }
+
+                // GDK Pixbuf loaders cache
+                let loader_cache = dir.join("lib").join("gdk-pixbuf-2.0").join("2.10.0").join("loaders.cache");
+                if loader_cache.exists() && std::env::var_os("GDK_PIXBUF_MODULE_FILE").is_none() {
+                    unsafe {
+                        std::env::set_var("GDK_PIXBUF_MODULE_FILE", &loader_cache);
+                    }
+                }
+
+                // High performance Next-Gen GL renderer
+                if std::env::var_os("GSK_RENDERER").is_none() {
+                    unsafe {
+                        std::env::set_var("GSK_RENDERER", "ngl");
+                    }
+                }
+
+                // Register bundled fonts into Windows process font table
+                let fonts_dir = dir.join("share").join("fonts");
+                if fonts_dir.exists() {
+                    load_bundled_fonts(&fonts_dir);
+                }
+            }
+        }
+    }
+
+    // Create and enter Tokio multi-threaded runtime context
     let tokio_rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .max_blocking_threads(8)
@@ -64,6 +114,48 @@ fn main() {
     info!("Calling app.run()...");
     let exit_status = app.run();
     info!("app.run() finished with status: {:?}", exit_status);
+}
+
+#[cfg(target_os = "windows")]
+fn load_bundled_fonts(fonts_dir: &std::path::Path) {
+    use std::os::windows::ffi::OsStrExt;
+    unsafe extern "system" {
+        fn AddFontResourceExW(lpszFilename: *const u16, fl: u32, pdv: *mut std::ffi::c_void) -> i32;
+    }
+    const FR_PRIVATE: u32 = 0x10;
+
+    if let Ok(entries) = std::fs::read_dir(fonts_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+            if ext.eq_ignore_ascii_case("ttf") || ext.eq_ignore_ascii_case("otf") || ext.eq_ignore_ascii_case("ttc") {
+                let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+                unsafe {
+                    let ret = AddFontResourceExW(wide.as_ptr(), FR_PRIVATE, std::ptr::null_mut());
+                    if ret > 0 {
+                        info!("Loaded bundled font: {:?}", path.file_name().unwrap_or_default());
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn ensure_desktop_integration() {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let icon_dir = dir.join("share").join("icons");
+            if icon_dir.exists() {
+                if let Some(display) = gdk4::Display::default() {
+                    let theme = gtk4::IconTheme::for_display(&display);
+                    theme.add_search_path(&icon_dir);
+                    theme.add_search_path(&icon_dir.join("hicolor"));
+                    theme.add_search_path(&icon_dir.join("Adwaita"));
+                }
+            }
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -117,5 +209,5 @@ fn ensure_desktop_integration() {
         .status();
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 fn ensure_desktop_integration() {}

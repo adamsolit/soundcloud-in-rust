@@ -117,35 +117,21 @@ impl MpvDriver {
             }
         }
 
-        let cmd_stream = connected_cmd.context("Timed out connecting to mpv IPC socket")?;
-
-        // Continually drain command replies so kernel socket buffer never blocks mpv IPC
-        if let Ok(reader_stream) = cmd_stream.try_clone() {
-            #[cfg(unix)]
-            let _ = reader_stream.set_read_timeout(None);
-            std::thread::spawn(move || {
-                let mut reader = BufReader::new(reader_stream);
-                let mut line = String::new();
-                while let Ok(n) = reader.read_line(&mut line) {
-                    if n == 0 {
-                        break; // EOF: socket disconnected
-                    }
-                    line.clear();
-                }
-            });
-        }
-
-        // Establish second connection for event monitoring
-        let mut evt_stream = connect_ipc(&sock_path)
-            .context("Connecting event socket to mpv IPC")?;
+        let mut cmd_stream = connected_cmd.context("Timed out connecting to mpv IPC socket")?;
         #[cfg(unix)]
-        let _ = evt_stream.set_read_timeout(None); // blocking read in dedicated thread
+        let _ = cmd_stream.set_read_timeout(None);
+        #[cfg(unix)]
+        let _ = cmd_stream.set_write_timeout(None);
 
-        // Register property observers on event socket
+        let reader_stream = cmd_stream.try_clone().context("Cloning MPV IPC stream handle")?;
+        #[cfg(unix)]
+        let _ = reader_stream.set_read_timeout(None);
+
+        // Register property observers on connected IPC stream
         let obs1 = serde_json::json!({"command": ["observe_property", 1, "time-pos"]}).to_string();
         let obs2 = serde_json::json!({"command": ["observe_property", 2, "pause"]}).to_string();
         let obs3 = serde_json::json!({"command": ["observe_property", 3, "duration"]}).to_string();
-        let _ = evt_stream.write_all(format!("{}\n{}\n{}\n", obs1, obs2, obs3).as_bytes());
+        let _ = cmd_stream.write_all(format!("{}\n{}\n{}\n", obs1, obs2, obs3).as_bytes());
 
         let position_ms = Arc::new(AtomicU64::new(0));
         let duration_ms = Arc::new(AtomicU64::new(0));
@@ -164,7 +150,7 @@ impl MpvDriver {
 
         // Dedicated event reader thread
         std::thread::spawn(move || {
-            let reader = BufReader::new(evt_stream);
+            let reader = BufReader::new(reader_stream);
             for line_res in reader.lines() {
                 match line_res {
                     Ok(line) => {

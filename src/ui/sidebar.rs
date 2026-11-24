@@ -59,7 +59,10 @@ impl Sidebar {
         brand_box.set_hexpand_set(true);
 
         let svg_bytes = glib::Bytes::from_static(include_bytes!("../../assets/soundcloud.svg"));
-        let texture = gdk::Texture::from_bytes(&svg_bytes).ok();
+        let png_bytes = glib::Bytes::from_static(include_bytes!("../../assets/soundcloud_logo.png"));
+        let texture = gdk::Texture::from_bytes(&svg_bytes)
+            .or_else(|_| gdk::Texture::from_bytes(&png_bytes))
+            .ok();
         let brand_icon = gtk::Image::builder()
             .pixel_size(24)
             .valign(gtk::Align::Center)
@@ -67,7 +70,7 @@ impl Sidebar {
         if let Some(ref t) = texture {
             brand_icon.set_paintable(Some(t));
         } else {
-            brand_icon.set_icon_name(Some("weather-overcast-symbolic"));
+            brand_icon.set_icon_name(Some("audio-x-generic-symbolic"));
         }
 
         let brand_label = gtk::Label::builder()

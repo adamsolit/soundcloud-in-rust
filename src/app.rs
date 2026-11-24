@@ -2448,29 +2448,37 @@ fn handle_toggle_stash_internal(state: &Rc<AppState>, window: &Rc<MainWindow>, t
             }
             info!("Track {} removed from offline stash", track.id);
         } else {
-            // Download track stream to ~/.local/share/cloudpulse/stash/<track_id>.m4a
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            let stash_dir = std::path::PathBuf::from(home).join(".local/share/cloudpulse/stash");
+            // Download track stream to <data_dir>/stash/<track_id>.m4a
+            let stash_dir = crate::paths::data_dir().join("stash");
             let _ = std::fs::create_dir_all(&stash_dir);
             let dest_file = stash_dir.join(format!("{}.m4a", track.id));
 
             match s.client.get_stream_url(&track).await {
                 Ok(stream_url) => {
-                    info!("Stashing track {} via ffmpeg transcode from {}", track.id, stream_url);
-                    let status = tokio::process::Command::new("ffmpeg")
-                        .arg("-y")
-                        .arg("-i")
-                        .arg(&stream_url)
-                        .arg("-vn")
-                        .arg("-c:a")
-                        .arg("aac")
-                        .arg("-b:a")
-                        .arg("192k")
-                        .arg("-movflags")
-                        .arg("+faststart")
-                        .arg(&dest_file)
-                        .status()
-                        .await;
+                    info!("Stashing track {} via mpv stream dump from {}", track.id, stream_url);
+
+                    let mut mpv_path = std::path::PathBuf::from("mpv");
+                    if let Ok(exe) = std::env::current_exe() {
+                        if let Some(dir) = exe.parent() {
+                            let local = dir.join(if cfg!(windows) { "mpv.exe" } else { "mpv" });
+                            if local.exists() {
+                                mpv_path = local;
+                            }
+                        }
+                    }
+
+                    let mut cmd = tokio::process::Command::new(mpv_path);
+                    cmd.arg(&stream_url)
+                        .arg(format!("--stream-dump={}", dest_file.to_string_lossy()))
+                        .arg("--terminal=no")
+                        .arg("--no-video");
+
+                    #[cfg(windows)]
+                    {
+                        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+                    }
+
+                    let status = cmd.status().await;
 
                     match status {
                         Ok(exit_code) if exit_code.success() => {
@@ -2489,7 +2497,7 @@ fn handle_toggle_stash_internal(state: &Rc<AppState>, window: &Rc<MainWindow>, t
                             info!("Successfully stashed track {} ({:.1} MB)", track.id, file_size as f64 / 1_048_576.0);
                         }
                         _ => {
-                            warn!("ffmpeg stash transcode failed for track {}, falling back to direct stream fetch", track.id);
+                            warn!("mpv stream dump failed for track {}, falling back to direct stream fetch", track.id);
                             if !stream_url.contains(".m3u8") {
                                 if let Ok(resp) = reqwest::get(&stream_url).await {
                                     if let Ok(bytes) = resp.bytes().await {
