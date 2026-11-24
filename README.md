@@ -72,6 +72,14 @@ cargo build --release
 
 ---
 
+## Contributors
+
+- **adamsolit** ([@adamsolit](https://github.com/adamsolit))
+- **abodyfawaz** ([@abodyfawaz](https://github.com/abodyfawaz))
+- **Antigravity** ([Google DeepMind](https://deepmind.google)) — AI Pair Programmer
+
+---
+
 ## License
 
 MIT
