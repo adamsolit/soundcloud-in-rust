@@ -21,6 +21,7 @@ pub struct AppState {
     pub db: Database,
     pub mpris: Rc<RefCell<Option<MprisService>>>,
     pub current_track: Rc<RefCell<Option<Track>>>,
+    pub pending_bookmark_track: Rc<RefCell<Option<Track>>>,
     pub pending_resume_pos: Rc<RefCell<Option<u64>>>,
     pub play_request_counter: std::sync::atomic::AtomicU64,
     pub sleep_timer_end: Rc<RefCell<Option<std::time::Instant>>>,
@@ -46,6 +47,7 @@ impl Application {
             db,
             mpris: Rc::new(RefCell::new(None)),
             current_track: Rc::new(RefCell::new(None)),
+            pending_bookmark_track: Rc::new(RefCell::new(None)),
             pending_resume_pos: Rc::new(RefCell::new(None)),
             play_request_counter: std::sync::atomic::AtomicU64::new(0),
             sleep_timer_end: Rc::new(RefCell::new(None)),
@@ -202,15 +204,29 @@ impl Application {
         let state_key = Rc::clone(&application.state);
         let mpris_key = Rc::clone(&application.state.mpris);
 
-        key_controller.connect_key_pressed(move |_controller, key, _keycode, _modifier| {
-            if let Some(focus) = gtk4::prelude::GtkWindowExt::focus(win_key.window()) {
-                if focus.is::<gtk4::Editable>() || focus.is::<gtk4::TextView>() {
-                    return glib::Propagation::Proceed;
+        key_controller.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        key_controller.connect_key_pressed(move |_controller, key, keycode, modifier| {
+            let win_ref = win_key.window();
+            if is_text_input_focused(win_ref) {
+                return glib::Propagation::Proceed;
+            }
+
+            if matches_shortcut_key(win_ref, key, keycode, modifier, gdk4::Key::b, gdk4::Key::B) {
+                if let Some((track, pos)) = active_bookmark_target(&state_key, &win_key) {
+                    let dur = track.duration;
+                    *state_key.pending_bookmark_track.borrow_mut() = Some(track);
+                    win_key.player_bar().prompt_add_bookmark(pos, dur);
                 }
+                return glib::Propagation::Stop;
             }
 
             match key {
                 gdk4::Key::space => {
+                    if let Some(focus) = gtk4::prelude::GtkWindowExt::focus(win_ref) {
+                        if focus.is::<gtk4::Button>() {
+                            return glib::Propagation::Proceed;
+                        }
+                    }
                     let st = audio_key.get_state();
                     let needs_stream = !audio_key.is_loaded()
                         || st == crate::audio::PlaybackState::Stopped
@@ -260,14 +276,6 @@ impl Application {
                     let dur = audio_key.get_duration_ms();
                     let target = (cur + 5000).min(dur);
                     let _ = audio_key.seek(target);
-                    glib::Propagation::Stop
-                }
-                gdk4::Key::b | gdk4::Key::B => {
-                    if let Some(ref track) = *state_key.current_track.borrow() {
-                        let pos = state_key.audio.get_position_ms();
-                        let dur = track.duration;
-                        win_key.player_bar().prompt_add_bookmark(pos, dur);
-                    }
                     glib::Propagation::Stop
                 }
                 _ => glib::Propagation::Proceed,
@@ -503,7 +511,10 @@ impl Application {
                 let dur = audio_c.get_duration_ms();
                 win_c.player_bar().update_position(pos, dur);
                 win_c.mini_player().update_position(pos, dur);
-                if win_c.track_detail_view.widget().is_visible() {
+                if win_c.track_detail_view.widget().is_visible()
+                    && win_c.track_detail_view.current_track_id()
+                        == state_sync.current_track.borrow().as_ref().map(|t| t.id)
+                {
                     win_c.track_detail_view.update_position(pos, dur);
                 }
 
@@ -885,9 +896,9 @@ impl Application {
         let state_bm_pb = Rc::clone(&state_c);
         let win_bm_pb = Rc::clone(&win_c);
         player_bar.connect_add_bookmark(move || {
-            if let Some(ref track) = *state_bm_pb.current_track.borrow() {
-                let pos = state_bm_pb.audio.get_position_ms();
+            if let Some((track, pos)) = active_bookmark_target(&state_bm_pb, &win_bm_pb) {
                 let dur = track.duration;
+                *state_bm_pb.pending_bookmark_track.borrow_mut() = Some(track);
                 win_bm_pb.player_bar().prompt_add_bookmark(pos, dur);
             }
         });
@@ -896,7 +907,12 @@ impl Application {
         let state_bm_save = Rc::clone(&state_c);
         let win_bm_save = Rc::clone(&win_c);
         player_bar.connect_save_bookmark(move |pos_ms, note| {
-            if let Some(ref track) = *state_bm_save.current_track.borrow() {
+            let target_track = state_bm_save
+                .pending_bookmark_track
+                .borrow_mut()
+                .take()
+                .or_else(|| state_bm_save.current_track.borrow().clone());
+            if let Some(track) = target_track {
                 let clean_note = if note.trim().is_empty() { "Bookmark".to_string() } else { note.trim().to_string() };
                 let _ = state_bm_save.db.add_bookmark(track.id, pos_ms, &clean_note);
                 refresh_bookmarks_ui(&state_bm_save, &win_bm_save, track.id, track.duration);
@@ -1571,6 +1587,19 @@ impl Application {
                 .map(|t| t.duration)
                 .unwrap_or(0);
             refresh_bookmarks_ui(&s_td_bm, &w_td_bm, track_id, fallback_dur);
+        });
+
+        let s_td_ed_bm = Rc::clone(&state_c);
+        let w_td_ed_bm = Rc::clone(&win_c);
+        self.window.track_detail_view.connect_edit_bookmark(move |bookmark_id, new_note| {
+            let _ = s_td_ed_bm.db.update_bookmark_note(bookmark_id, &new_note);
+            if let Some(track) = w_td_ed_bm
+                .track_detail_view
+                .current_track()
+                .or_else(|| s_td_ed_bm.current_track.borrow().clone())
+            {
+                refresh_bookmarks_ui(&s_td_ed_bm, &w_td_ed_bm, track.id, track.duration);
+            }
         });
 
         let s_td_del_bm = Rc::clone(&state_c);
@@ -2494,11 +2523,70 @@ fn handle_track_like_internal(
 }
 
 fn handle_add_bookmark_quick(state: &Rc<AppState>, window: &Rc<MainWindow>, note: &str) {
-    if let Some(ref track) = *state.current_track.borrow() {
-        let pos = state.audio.get_position_ms();
+    if let Some((track, pos)) = active_bookmark_target(state, window) {
         let _ = state.db.add_bookmark(track.id, pos, note);
         refresh_bookmarks_ui(state, window, track.id, track.duration);
     }
+}
+
+fn is_text_input_focused(window: &adw::ApplicationWindow) -> bool {
+    if let Some(focus) = gtk4::prelude::GtkWindowExt::focus(window) {
+        return focus.is::<gtk4::Editable>()
+            || focus.is::<gtk4::TextView>()
+            || focus.ancestor(gtk4::Editable::static_type()).is_some()
+            || focus.ancestor(gtk4::TextView::static_type()).is_some();
+    }
+    false
+}
+
+fn matches_shortcut_key(
+    window: &adw::ApplicationWindow,
+    key: gdk4::Key,
+    keycode: u32,
+    modifier: gdk4::ModifierType,
+    lower: gdk4::Key,
+    upper: gdk4::Key,
+) -> bool {
+    if modifier.intersects(
+        gdk4::ModifierType::CONTROL_MASK
+            | gdk4::ModifierType::ALT_MASK
+            | gdk4::ModifierType::SUPER_MASK
+            | gdk4::ModifierType::META_MASK,
+    ) {
+        return false;
+    }
+
+    if key == lower || key == upper {
+        return true;
+    }
+
+    if let Some(mappings) = gtk4::prelude::WidgetExt::display(window).map_keycode(keycode) {
+        return mappings
+            .into_iter()
+            .any(|(_kmap, mapped_key)| mapped_key == lower || mapped_key == upper);
+    }
+
+    false
+}
+
+fn effective_position_ms(state: &AppState) -> u64 {
+    if state.audio.is_loaded() {
+        state.audio.get_position_ms()
+    } else {
+        state.pending_resume_pos.borrow().unwrap_or(0)
+    }
+}
+
+fn active_bookmark_target(state: &AppState, window: &MainWindow) -> Option<(Track, u64)> {
+    if let Some(ref current) = *state.current_track.borrow() {
+        return Some((current.clone(), effective_position_ms(state)));
+    }
+    if window.track_detail_view.widget().is_visible() {
+        if let Some(detail_track) = window.track_detail_view.current_track() {
+            return Some((detail_track, window.track_detail_view.current_position_ms()));
+        }
+    }
+    None
 }
 
 fn handle_toggle_stash_internal(state: &Rc<AppState>, window: &Rc<MainWindow>, track: Track) {

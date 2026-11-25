@@ -390,6 +390,15 @@ impl Database {
         Ok(list)
     }
 
+    pub fn update_bookmark_note(&self, bookmark_id: i64, note: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE bookmarks SET note = ?1 WHERE id = ?2",
+            params![note, bookmark_id],
+        )?;
+        Ok(())
+    }
+
     pub fn delete_bookmark(&self, bookmark_id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM bookmarks WHERE id = ?1", params![bookmark_id])?;

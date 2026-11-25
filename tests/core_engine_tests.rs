@@ -352,6 +352,13 @@ fn test_bookmarks_crud() {
     assert_eq!(bms[0].timestamp_ms, 45000);
     assert_eq!(bms[0].note, "Drop at 0:45");
 
+    db.update_bookmark_note(bm_id, "بداية المقطع")
+        .expect("Failed to update bookmark note");
+    let bms_updated = db.get_bookmarks(track_id).expect("Failed to get updated bookmarks");
+    assert_eq!(bms_updated.len(), 1);
+    assert_eq!(bms_updated[0].timestamp_ms, 45000);
+    assert_eq!(bms_updated[0].note, "بداية المقطع");
+
     db.delete_bookmark(bm_id).expect("Failed to delete bookmark");
     let bms_after = db.get_bookmarks(track_id).expect("Failed to get bookmarks after delete");
     assert!(bms_after.is_empty());

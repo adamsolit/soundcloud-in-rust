@@ -29,6 +29,7 @@ pub struct PlayerBar {
     bm_prompt_entry: gtk::Entry,
     bm_prompt_title: gtk::Label,
     bm_current_pos_ms: Rc<Cell<u64>>,
+    wave_row: gtk::Box,
     waveform: Rc<WaveformWidget>,
     time_current: gtk::Label,
     time_total: gtk::Label,
@@ -427,7 +428,7 @@ impl PlayerBar {
             .has_arrow(true)
             .position(gtk::PositionType::Top)
             .build();
-        bookmark_popover.set_parent(waveform.widget());
+        bookmark_popover.set_parent(&wave_row);
 
         let bm_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
@@ -517,6 +518,17 @@ impl PlayerBar {
 
         let do_save_c2 = do_save.clone();
         bm_prompt_entry.connect_activate(move |_| do_save_c2());
+
+        let bm_pop_closed = bookmark_popover.clone();
+        bookmark_popover.connect_closed(move |pop| {
+            if let Some(root) = pop.root().and_then(|r| r.downcast::<gtk::Window>().ok()) {
+                if let Some(focused) = gtk::prelude::GtkWindowExt::focus(&root) {
+                    if focused.is_ancestor(&bm_pop_closed) || &focused == bm_pop_closed.upcast_ref::<gtk::Widget>() {
+                        gtk::prelude::GtkWindowExt::set_focus(&root, None::<&gtk::Widget>);
+                    }
+                }
+            }
+        });
 
         // --- C. Queue Flyout Button & Popover ---
         let btn_queue = gtk::Button::builder()
@@ -780,6 +792,7 @@ impl PlayerBar {
             bm_prompt_entry,
             bm_prompt_title,
             bm_current_pos_ms,
+            wave_row,
             waveform,
             time_current,
             time_total,
@@ -880,12 +893,28 @@ impl PlayerBar {
         } else {
             0.0
         };
-        let w = self.waveform.widget().width() as f64;
-        let target_x = if w > 20.0 { (pct * w).clamp(10.0, w - 10.0) } else { 50.0 };
-        let rect = gdk4::Rectangle::new(target_x as i32, 0, 1, 1);
+        let wave_w = self.waveform.widget().width() as f64;
+        let local_x = if wave_w > 20.0 {
+            (pct * wave_w).clamp(10.0, wave_w - 10.0)
+        } else {
+            50.0
+        };
+        let target_x = self
+            .waveform
+            .widget()
+            .compute_point(&self.wave_row, &gtk::graphene::Point::new(local_x as f32, 0.0))
+            .map(|pt| pt.x() as i32)
+            .unwrap_or(local_x as i32);
+
+        let rect = gdk4::Rectangle::new(target_x, 0, 1, 1);
         self.bookmark_popover.set_pointing_to(Some(&rect));
-        self.bookmark_popover.popup();
-        self.bm_prompt_entry.grab_focus();
+
+        let pop = self.bookmark_popover.clone();
+        let entry = self.bm_prompt_entry.clone();
+        glib::idle_add_local_once(move || {
+            pop.popup();
+            entry.grab_focus();
+        });
     }
 
     pub fn connect_save_bookmark<F: Fn(u64, String) + 'static>(&self, f: F) {

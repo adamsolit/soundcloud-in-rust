@@ -36,6 +36,7 @@ pub struct TrackDetailView {
     on_post_comment: Rc<RefCell<Option<Box<dyn Fn(u64, String, u64)>>>>,
     on_select_user: Rc<RefCell<Option<Box<dyn Fn(u64)>>>>,
     on_add_bookmark: Rc<RefCell<Option<Box<dyn Fn(u64, u64, String)>>>>,
+    on_edit_bookmark: Rc<RefCell<Option<Box<dyn Fn(i64, String)>>>>,
     on_delete_bookmark: Rc<RefCell<Option<Box<dyn Fn(i64)>>>>,
     on_stash_toggle: Rc<RefCell<Option<Box<dyn Fn()>>>>,
 }
@@ -290,6 +291,7 @@ impl TrackDetailView {
         let on_post_comment: Rc<RefCell<Option<Box<dyn Fn(u64, String, u64)>>>> = Rc::new(RefCell::new(None));
         let on_select_user: Rc<RefCell<Option<Box<dyn Fn(u64)>>>> = Rc::new(RefCell::new(None));
         let on_add_bookmark: Rc<RefCell<Option<Box<dyn Fn(u64, u64, String)>>>> = Rc::new(RefCell::new(None));
+        let on_edit_bookmark: Rc<RefCell<Option<Box<dyn Fn(i64, String)>>>> = Rc::new(RefCell::new(None));
         let on_delete_bookmark: Rc<RefCell<Option<Box<dyn Fn(i64)>>>> = Rc::new(RefCell::new(None));
         let on_stash_toggle: Rc<RefCell<Option<Box<dyn Fn()>>>> = Rc::new(RefCell::new(None));
 
@@ -347,27 +349,35 @@ impl TrackDetailView {
             }
         });
 
-        // Connect add bookmark button
-        let add_bm_cb = Rc::clone(&on_add_bookmark);
-        let track_bm = Rc::clone(&current_track);
-        let pos_bm = Rc::clone(&current_position_ms);
-        let bm_input_c = bookmark_input.clone();
-
-        btn_add_bookmark.connect_clicked(move |_| {
-            let text = bm_input_c.text().trim().to_string();
-            let note = if text.is_empty() {
-                "Bookmark".to_string()
-            } else {
-                text
-            };
-            if let Some(ref t) = *track_bm.borrow() {
-                let pos = *pos_bm.borrow();
-                if let Some(ref cb) = *add_bm_cb.borrow() {
-                    cb(t.id, pos, note);
+        // Connect add bookmark button and Enter key on input
+        let do_add_bookmark = {
+            let add_bm_cb = Rc::clone(&on_add_bookmark);
+            let track_bm = Rc::clone(&current_track);
+            let pos_bm = Rc::clone(&current_position_ms);
+            let bm_input_c = bookmark_input.clone();
+            move || {
+                let text = bm_input_c.text().trim().to_string();
+                let note = if text.is_empty() {
+                    "Bookmark".to_string()
+                } else {
+                    text
+                };
+                if let Some(ref t) = *track_bm.borrow() {
+                    let pos = *pos_bm.borrow();
+                    if let Some(ref cb) = *add_bm_cb.borrow() {
+                        cb(t.id, pos, note);
+                    }
+                    bm_input_c.set_text("");
+                    clear_window_focus(&bm_input_c);
                 }
-                bm_input_c.set_text("");
             }
-        });
+        };
+
+        let do_add_bm_btn = do_add_bookmark.clone();
+        btn_add_bookmark.connect_clicked(move |_| do_add_bm_btn());
+
+        let do_add_bm_enter = do_add_bookmark;
+        bookmark_input.connect_activate(move |_| do_add_bm_enter());
 
         // Connect stash toggle
         let stash_cb = Rc::clone(&on_stash_toggle);
@@ -406,6 +416,7 @@ impl TrackDetailView {
             on_post_comment,
             on_select_user,
             on_add_bookmark,
+            on_edit_bookmark,
             on_delete_bookmark,
             on_stash_toggle,
         }
@@ -655,6 +666,14 @@ impl TrackDetailView {
                 .build();
 
             let ts_str = format_milliseconds(bm.timestamp_ms);
+
+            // Display container (default visible)
+            let display_box = gtk::Box::builder()
+                .orientation(gtk::Orientation::Horizontal)
+                .spacing(12)
+                .hexpand(true)
+                .build();
+
             let jump_box = gtk::Box::builder()
                 .orientation(gtk::Orientation::Horizontal)
                 .spacing(12)
@@ -687,6 +706,13 @@ impl TrackDetailView {
             jump_box.append(&time_lbl);
             self.attach_jump_handler(&jump_box, bm.timestamp_ms, duration_ms);
 
+            let edit_btn = gtk::Button::builder()
+                .icon_name("document-edit-symbolic")
+                .css_classes(["btn-card-like"])
+                .valign(gtk::Align::Center)
+                .tooltip_text("Edit bookmark name")
+                .build();
+
             let del_btn = gtk::Button::builder()
                 .icon_name("user-trash-symbolic")
                 .css_classes(["btn-card-like"])
@@ -694,22 +720,132 @@ impl TrackDetailView {
                 .tooltip_text("Delete bookmark")
                 .build();
 
-            let del_cb = Rc::clone(&self.on_delete_bookmark);
+            display_box.append(&jump_box);
+            display_box.append(&edit_btn);
+            display_box.append(&del_btn);
+
+            // Inline edit container (toggled when edit_btn is clicked)
+            let edit_box = gtk::Box::builder()
+                .orientation(gtk::Orientation::Horizontal)
+                .spacing(10)
+                .hexpand(true)
+                .visible(false)
+                .build();
+
+            let edit_ts_badge = gtk::Label::builder()
+                .label(&ts_str)
+                .css_classes(["filter-chip", "active"])
+                .valign(gtk::Align::Center)
+                .build();
+
+            let edit_entry = gtk::Entry::builder()
+                .text(&bm.note)
+                .placeholder_text("Bookmark name...")
+                .css_classes(["sc-search-entry"])
+                .hexpand(true)
+                .build();
+
+            let save_btn = gtk::Button::builder()
+                .label("Save")
+                .css_classes(["filter-chip", "active"])
+                .valign(gtk::Align::Center)
+                .build();
+
+            let cancel_btn = gtk::Button::builder()
+                .icon_name("window-close-symbolic")
+                .css_classes(["btn-card-like"])
+                .valign(gtk::Align::Center)
+                .tooltip_text("Cancel editing")
+                .build();
+
+            edit_box.append(&edit_ts_badge);
+            edit_box.append(&edit_entry);
+            edit_box.append(&save_btn);
+            edit_box.append(&cancel_btn);
+
+            let original_note = bm.note.clone();
             let bm_id = bm.id;
+
+            let disp_enter = display_box.clone();
+            let edit_enter = edit_box.clone();
+            let entry_enter = edit_entry.clone();
+            let orig_enter = original_note.clone();
+            edit_btn.connect_clicked(move |_| {
+                entry_enter.set_text(&orig_enter);
+                disp_enter.set_visible(false);
+                edit_enter.set_visible(true);
+                entry_enter.grab_focus();
+            });
+
+            let do_cancel = {
+                let disp_c = display_box.clone();
+                let edit_c = edit_box.clone();
+                let entry_c = edit_entry.clone();
+                move || {
+                    edit_c.set_visible(false);
+                    disp_c.set_visible(true);
+                    clear_window_focus(&entry_c);
+                }
+            };
+
+            let cancel_btn_cb = do_cancel.clone();
+            cancel_btn.connect_clicked(move |_| cancel_btn_cb());
+
+            let esc_ctrl = gtk::EventControllerKey::new();
+            let cancel_esc_cb = do_cancel.clone();
+            esc_ctrl.connect_key_pressed(move |_ctrl, key, _keycode, _mod| {
+                if key == gtk::gdk::Key::Escape {
+                    cancel_esc_cb();
+                    return gtk::glib::Propagation::Stop;
+                }
+                gtk::glib::Propagation::Proceed
+            });
+            edit_entry.add_controller(esc_ctrl);
+
+            let do_save = {
+                let edit_cb = Rc::clone(&self.on_edit_bookmark);
+                let disp_s = display_box.clone();
+                let edit_s = edit_box.clone();
+                let entry_s = edit_entry.clone();
+                let orig_s = original_note;
+                move || {
+                    let trimmed = entry_s.text().trim().to_string();
+                    edit_s.set_visible(false);
+                    disp_s.set_visible(true);
+                    clear_window_focus(&entry_s);
+                    if !trimmed.is_empty() && trimmed != orig_s {
+                        if let Some(ref cb) = *edit_cb.borrow() {
+                            cb(bm_id, trimmed);
+                        }
+                    }
+                }
+            };
+
+            let save_btn_cb = do_save.clone();
+            save_btn.connect_clicked(move |_| save_btn_cb());
+
+            let save_entry_cb = do_save;
+            edit_entry.connect_activate(move |_| save_entry_cb());
+
+            let del_cb = Rc::clone(&self.on_delete_bookmark);
             del_btn.connect_clicked(move |_| {
                 if let Some(ref cb) = *del_cb.borrow() {
                     cb(bm_id);
                 }
             });
 
-            row.append(&jump_box);
-            row.append(&del_btn);
+            row.append(&display_box);
+            row.append(&edit_box);
             self.bookmarks_list.append(&row);
         }
     }
 
     pub fn connect_add_bookmark<F: Fn(u64, u64, String) + 'static>(&self, f: F) {
         *self.on_add_bookmark.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_edit_bookmark<F: Fn(i64, String) + 'static>(&self, f: F) {
+        *self.on_edit_bookmark.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_delete_bookmark<F: Fn(i64) + 'static>(&self, f: F) {
@@ -728,7 +864,17 @@ impl TrackDetailView {
         self.current_track.borrow().as_ref().map(|t| t.id)
     }
 
+    pub fn current_position_ms(&self) -> u64 {
+        *self.current_position_ms.borrow()
+    }
+
     pub fn waveform(&self) -> &WaveformWidget {
         &self.waveform
+    }
+}
+
+fn clear_window_focus(widget: &impl IsA<gtk::Widget>) {
+    if let Some(root) = widget.root().and_then(|r| r.downcast::<gtk::Window>().ok()) {
+        gtk::prelude::GtkWindowExt::set_focus(&root, None::<&gtk::Widget>);
     }
 }
