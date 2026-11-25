@@ -7,25 +7,304 @@ use std::time::Duration;
 use tracing::{debug, info, warn};
 
 #[cfg(unix)]
-pub type IpcStream = std::os::unix::net::UnixStream;
+pub type IpcWriter = std::os::unix::net::UnixStream;
+#[cfg(unix)]
+pub type IpcReader = std::os::unix::net::UnixStream;
 
 #[cfg(windows)]
-pub type IpcStream = std::fs::File;
+mod win_pipe {
+    use std::ffi::c_void;
+    use std::io::{self, Read, Write};
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::{null, null_mut};
+    use std::sync::Arc;
 
-fn connect_ipc(sock_path: &str) -> std::io::Result<IpcStream> {
+    type Handle = *mut c_void;
+    const INVALID_HANDLE_VALUE: Handle = -1isize as Handle;
+    const GENERIC_READ: u32 = 0x8000_0000;
+    const GENERIC_WRITE: u32 = 0x4000_0000;
+    const OPEN_EXISTING: u32 = 3;
+    const FILE_FLAG_OVERLAPPED: u32 = 0x4000_0000;
+    const ERROR_BROKEN_PIPE: u32 = 109;
+    const ERROR_PIPE_BUSY: u32 = 231;
+    const ERROR_NO_DATA: u32 = 232;
+    const ERROR_PIPE_NOT_CONNECTED: u32 = 233;
+    const ERROR_MORE_DATA: u32 = 234;
+    const ERROR_OPERATION_ABORTED: u32 = 995;
+    const ERROR_IO_PENDING: u32 = 997;
+
+    #[repr(C)]
+    struct Overlapped {
+        internal: usize,
+        internal_high: usize,
+        offset: u32,
+        offset_high: u32,
+        h_event: Handle,
+    }
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn CreateFileW(
+            lp_file_name: *const u16,
+            dw_desired_access: u32,
+            dw_share_mode: u32,
+            lp_security_attributes: *const c_void,
+            dw_creation_disposition: u32,
+            dw_flags_and_attributes: u32,
+            h_template_file: Handle,
+        ) -> Handle;
+        fn WaitNamedPipeW(lp_named_pipe_name: *const u16, n_time_out: u32) -> i32;
+        fn ReadFile(
+            h_file: Handle,
+            lp_buffer: *mut u8,
+            n_number_of_bytes_to_read: u32,
+            lp_number_of_bytes_read: *mut u32,
+            lp_overlapped: *mut Overlapped,
+        ) -> i32;
+        fn WriteFile(
+            h_file: Handle,
+            lp_buffer: *const u8,
+            n_number_of_bytes_to_write: u32,
+            lp_number_of_bytes_written: *mut u32,
+            lp_overlapped: *mut Overlapped,
+        ) -> i32;
+        fn CreateEventW(
+            lp_event_attributes: *const c_void,
+            b_manual_reset: i32,
+            b_initial_state: i32,
+            lp_name: *const u16,
+        ) -> Handle;
+        fn ResetEvent(h_event: Handle) -> i32;
+        fn GetOverlappedResult(
+            h_file: Handle,
+            lp_overlapped: *mut Overlapped,
+            lp_number_of_bytes_transferred: *mut u32,
+            b_wait: i32,
+        ) -> i32;
+        fn CancelIoEx(h_file: Handle, lp_overlapped: *mut Overlapped) -> i32;
+        fn CloseHandle(h_object: Handle) -> i32;
+        fn GetLastError() -> u32;
+    }
+
+    struct WinPipeHandle {
+        handle: Handle,
+    }
+
+    // Overlapped Win32 named pipe HANDLE supports concurrent full-duplex ReadFile/WriteFile
+    // across threads when each call uses its own independent OVERLAPPED + h_event.
+    unsafe impl Send for WinPipeHandle {}
+    unsafe impl Sync for WinPipeHandle {}
+
+    impl Drop for WinPipeHandle {
+        fn drop(&mut self) {
+            unsafe {
+                CancelIoEx(self.handle, null_mut());
+                CloseHandle(self.handle);
+            }
+        }
+    }
+
+    pub struct WinPipeReader {
+        pipe: Arc<WinPipeHandle>,
+        event: Handle,
+    }
+
+    unsafe impl Send for WinPipeReader {}
+
+    impl Drop for WinPipeReader {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.event);
+            }
+        }
+    }
+
+    pub struct WinPipeWriter {
+        pipe: Arc<WinPipeHandle>,
+        event: Handle,
+    }
+
+    unsafe impl Send for WinPipeWriter {}
+
+    impl Drop for WinPipeWriter {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.event);
+            }
+        }
+    }
+
+    pub fn connect(pipe_path: &str) -> io::Result<(WinPipeWriter, WinPipeReader)> {
+        let wide: Vec<u16> = std::ffi::OsStr::new(pipe_path)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        let mut handle = unsafe {
+            CreateFileW(
+                wide.as_ptr(),
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                null(),
+                OPEN_EXISTING,
+                FILE_FLAG_OVERLAPPED,
+                null_mut(),
+            )
+        };
+
+        if handle == INVALID_HANDLE_VALUE && unsafe { GetLastError() } == ERROR_PIPE_BUSY {
+            unsafe {
+                WaitNamedPipeW(wide.as_ptr(), 200);
+                handle = CreateFileW(
+                    wide.as_ptr(),
+                    GENERIC_READ | GENERIC_WRITE,
+                    0,
+                    null(),
+                    OPEN_EXISTING,
+                    FILE_FLAG_OVERLAPPED,
+                    null_mut(),
+                );
+            }
+        }
+
+        if handle == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error());
+        }
+
+        let pipe = Arc::new(WinPipeHandle { handle });
+        let write_event = unsafe { CreateEventW(null(), 1, 0, null()) };
+        if write_event.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let read_event = unsafe { CreateEventW(null(), 1, 0, null()) };
+        if read_event.is_null() {
+            let err = io::Error::last_os_error();
+            unsafe {
+                CloseHandle(write_event);
+            }
+            return Err(err);
+        }
+
+        Ok((
+            WinPipeWriter {
+                pipe: Arc::clone(&pipe),
+                event: write_event,
+            },
+            WinPipeReader {
+                pipe,
+                event: read_event,
+            },
+        ))
+    }
+
+    fn finish_overlapped(handle: Handle, ov: &mut Overlapped, is_read: bool) -> io::Result<usize> {
+        let mut transferred: u32 = 0;
+        let ok = unsafe { GetOverlappedResult(handle, ov, &mut transferred, 1) };
+        if ok != 0 {
+            return Ok(transferred as usize);
+        }
+        let code = unsafe { GetLastError() };
+        if is_read && code == ERROR_MORE_DATA && transferred > 0 {
+            return Ok(transferred as usize);
+        }
+        if matches!(
+            code,
+            ERROR_BROKEN_PIPE | ERROR_NO_DATA | ERROR_PIPE_NOT_CONNECTED | ERROR_OPERATION_ABORTED
+        ) {
+            return if is_read {
+                Ok(0)
+            } else {
+                Err(io::Error::from_raw_os_error(code as i32))
+            };
+        }
+        Err(io::Error::from_raw_os_error(code as i32))
+    }
+
+    impl Read for WinPipeReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if buf.is_empty() {
+                return Ok(0);
+            }
+            unsafe {
+                ResetEvent(self.event);
+            }
+            let mut ov = Overlapped {
+                internal: 0,
+                internal_high: 0,
+                offset: 0,
+                offset_high: 0,
+                h_event: self.event,
+            };
+            let chunk = buf.len().min(u32::MAX as usize) as u32;
+            let ok = unsafe { ReadFile(self.pipe.handle, buf.as_mut_ptr(), chunk, null_mut(), &mut ov) };
+            if ok != 0 {
+                return finish_overlapped(self.pipe.handle, &mut ov, true);
+            }
+            let code = unsafe { GetLastError() };
+            if code == ERROR_IO_PENDING {
+                return finish_overlapped(self.pipe.handle, &mut ov, true);
+            }
+            if matches!(
+                code,
+                ERROR_BROKEN_PIPE | ERROR_NO_DATA | ERROR_PIPE_NOT_CONNECTED | ERROR_OPERATION_ABORTED
+            ) {
+                return Ok(0);
+            }
+            Err(io::Error::from_raw_os_error(code as i32))
+        }
+    }
+
+    impl Write for WinPipeWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            if buf.is_empty() {
+                return Ok(0);
+            }
+            unsafe {
+                ResetEvent(self.event);
+            }
+            let mut ov = Overlapped {
+                internal: 0,
+                internal_high: 0,
+                offset: 0,
+                offset_high: 0,
+                h_event: self.event,
+            };
+            let chunk = buf.len().min(u32::MAX as usize) as u32;
+            let ok = unsafe { WriteFile(self.pipe.handle, buf.as_ptr(), chunk, null_mut(), &mut ov) };
+            if ok != 0 {
+                return finish_overlapped(self.pipe.handle, &mut ov, false);
+            }
+            let code = unsafe { GetLastError() };
+            if code == ERROR_IO_PENDING {
+                return finish_overlapped(self.pipe.handle, &mut ov, false);
+            }
+            Err(io::Error::from_raw_os_error(code as i32))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+}
+
+#[cfg(windows)]
+pub type IpcWriter = win_pipe::WinPipeWriter;
+#[cfg(windows)]
+pub type IpcReader = win_pipe::WinPipeReader;
+
+fn connect_ipc(sock_path: &str) -> std::io::Result<(IpcWriter, IpcReader)> {
     #[cfg(unix)]
     {
-        let stream = std::os::unix::net::UnixStream::connect(sock_path)?;
-        let _ = stream.set_read_timeout(Some(Duration::from_millis(100)));
-        let _ = stream.set_write_timeout(Some(Duration::from_millis(100)));
-        Ok(stream)
+        let writer = std::os::unix::net::UnixStream::connect(sock_path)?;
+        let _ = writer.set_read_timeout(None);
+        let _ = writer.set_write_timeout(None);
+        let reader = writer.try_clone()?;
+        let _ = reader.set_read_timeout(None);
+        Ok((writer, reader))
     }
     #[cfg(windows)]
     {
-        std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(sock_path)
+        win_pipe::connect(sock_path)
     }
 }
 
@@ -34,7 +313,7 @@ pub type EofCallback = Box<dyn Fn() + Send + Sync + 'static>;
 pub struct MpvDriver {
     process: Mutex<Option<Child>>,
     sock_path: String,
-    cmd_stream: Mutex<Option<IpcStream>>,
+    cmd_stream: Mutex<Option<IpcWriter>>,
     position_ms: Arc<AtomicU64>,
     duration_ms: Arc<AtomicU64>,
     is_playing: Arc<AtomicBool>,
@@ -74,11 +353,16 @@ impl MpvDriver {
         let mut cmd = Command::new(mpv_path);
         cmd.arg("--idle=yes")
             .arg("--no-video")
+            .arg("--vo=null")
+            .arg("--no-config")
+            .arg("--load-scripts=no")
+            .arg("--ytdl=no")
             .arg(format!("--input-ipc-server={}", sock_path))
             .arg("--audio-buffer=0.2")
             .arg("--demuxer-max-bytes=24M")
             .arg("--demuxer-max-back-bytes=6M")
             .arg("--network-timeout=15")
+            .arg("--volume-max=150")
             .arg("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
             .arg("--force-window=no")
             .arg("--terminal=no")
@@ -105,27 +389,23 @@ impl MpvDriver {
             }
         }
 
-        let child = cmd.spawn().context("Failed to spawn mpv background process")?;
+        let mut child = cmd.spawn().context("Failed to spawn mpv background process")?;
 
-        // Wait up to 1500ms for IPC socket creation
+        // Wait up to 8000ms for IPC socket/pipe creation, failing early if mpv exits
         let mut connected_cmd = None;
-        for _ in 0..30 {
-            std::thread::sleep(Duration::from_millis(50));
-            if let Ok(stream) = connect_ipc(&sock_path) {
-                connected_cmd = Some(stream);
+        for _ in 0..160 {
+            if let Ok(pair) = connect_ipc(&sock_path) {
+                connected_cmd = Some(pair);
                 break;
             }
+            if let Ok(Some(status)) = child.try_wait() {
+                bail!("mpv process exited prematurely during startup ({})", status);
+            }
+            std::thread::sleep(Duration::from_millis(50));
         }
 
-        let mut cmd_stream = connected_cmd.context("Timed out connecting to mpv IPC socket")?;
-        #[cfg(unix)]
-        let _ = cmd_stream.set_read_timeout(None);
-        #[cfg(unix)]
-        let _ = cmd_stream.set_write_timeout(None);
-
-        let reader_stream = cmd_stream.try_clone().context("Cloning MPV IPC stream handle")?;
-        #[cfg(unix)]
-        let _ = reader_stream.set_read_timeout(None);
+        let (mut cmd_stream, reader_stream) =
+            connected_cmd.context("Timed out connecting to mpv IPC socket")?;
 
         // Register property observers on connected IPC stream
         let obs1 = serde_json::json!({"command": ["observe_property", 1, "time-pos"]}).to_string();
@@ -243,6 +523,9 @@ impl MpvDriver {
             eof_cb,
         };
 
+        #[cfg(windows)]
+        info!("MPV WASAPI audio backend ready");
+        #[cfg(not(windows))]
         info!("MPV hardware-accelerated PipeWire audio backend ready");
         Ok(driver)
     }
@@ -255,8 +538,8 @@ impl MpvDriver {
     fn send_command(&self, json_cmd: &str) -> Result<()> {
         let mut stream_guard = self.cmd_stream.lock().unwrap();
         if stream_guard.is_none() {
-            if let Ok(s) = connect_ipc(&self.sock_path) {
-                *stream_guard = Some(s);
+            if let Ok((writer, _reader)) = connect_ipc(&self.sock_path) {
+                *stream_guard = Some(writer);
             }
         }
 
@@ -270,9 +553,9 @@ impl MpvDriver {
 
         // Reconnect and retry once
         *stream_guard = None;
-        if let Ok(mut s) = connect_ipc(&self.sock_path) {
-            if s.write_all(payload.as_bytes()).is_ok() {
-                *stream_guard = Some(s);
+        if let Ok((mut writer, _reader)) = connect_ipc(&self.sock_path) {
+            if writer.write_all(payload.as_bytes()).is_ok() {
+                *stream_guard = Some(writer);
                 return Ok(());
             }
         }
@@ -419,6 +702,7 @@ impl MpvDriver {
                 let _ = child.wait();
             }
         }
+        #[cfg(unix)]
         let _ = std::fs::remove_file(&self.sock_path);
     }
 }
@@ -431,6 +715,7 @@ impl Drop for MpvDriver {
                 let _ = child.kill();
             }
         }
+        #[cfg(unix)]
         let _ = std::fs::remove_file(&self.sock_path);
     }
 }

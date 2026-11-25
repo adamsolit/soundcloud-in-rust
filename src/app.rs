@@ -2634,6 +2634,10 @@ fn handle_toggle_stash_internal(state: &Rc<AppState>, window: &Rc<MainWindow>, t
                     let mut cmd = tokio::process::Command::new(mpv_path);
                     cmd.arg(&stream_url)
                         .arg(format!("--stream-dump={}", dest_file.to_string_lossy()))
+                        .arg("--no-config")
+                        .arg("--load-scripts=no")
+                        .arg("--ytdl=no")
+                        .arg("--vo=null")
                         .arg("--terminal=no")
                         .arg("--no-video");
 

@@ -409,6 +409,61 @@ fn test_speed_control() {
     assert!((engine.get_speed() - 1.0).abs() < 0.01);
 }
 
+#[test]
+#[ignore = "requires mpv binary and audio output"]
+fn test_mpv_ipc_smoke() {
+    use cloudpulse::audio::mpv::MpvDriver;
+    use std::time::{Duration, Instant};
+
+    let sample_rate: u32 = 44_100;
+    let num_samples: u32 = sample_rate / 2;
+    let data_size: u32 = num_samples * 2;
+    let mut wav = Vec::with_capacity(44 + data_size as usize);
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + data_size).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&sample_rate.to_le_bytes());
+    wav.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+    wav.extend_from_slice(&2u16.to_le_bytes());
+    wav.extend_from_slice(&16u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data_size.to_le_bytes());
+    for i in 0..num_samples {
+        let t = i as f32 / sample_rate as f32;
+        let sample = (t * 440.0 * 2.0 * std::f32::consts::PI).sin() * 6000.0;
+        wav.extend_from_slice(&(sample as i16).to_le_bytes());
+    }
+
+    let wav_path = std::env::temp_dir().join(format!("cloudpulse_smoke_{}.wav", std::process::id()));
+    std::fs::write(&wav_path, wav).expect("Failed to write temporary smoke WAV");
+    let uri = format!("file://{}", wav_path.to_string_lossy());
+
+    let driver = MpvDriver::new().expect("MpvDriver::new should launch mpv and connect IPC");
+    driver.set_volume(0.8);
+    driver.set_speed(1.25);
+    driver.load_file(&uri, 500, 0).expect("load_file should send over IPC without deadlock");
+
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(3) {
+        if driver.get_duration_ms() > 0 && driver.is_loaded() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    driver.pause();
+    std::thread::sleep(Duration::from_millis(100));
+    driver.resume();
+    driver.seek(100).expect("seek command should succeed over IPC");
+    std::thread::sleep(Duration::from_millis(150));
+
+    driver.terminate();
+    let _ = std::fs::remove_file(&wav_path);
+}
+
 fn create_dummy_track(id: u64, title: &str) -> Track {
     Track {
         id,

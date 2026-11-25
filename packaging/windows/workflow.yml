@@ -31,6 +31,7 @@ jobs:
             mingw-w64-ucrt-x86_64-sqlite3
             mingw-w64-ucrt-x86_64-openssl
             mingw-w64-ucrt-x86_64-mpv
+            mingw-w64-ucrt-x86_64-libgomp
             zip
 
       - name: Verify Environment
