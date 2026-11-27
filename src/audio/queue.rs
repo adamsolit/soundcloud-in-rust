@@ -25,13 +25,28 @@ impl PlaybackQueue {
         }
 
         self.original_pool = tracks.clone();
-        let idx = start_idx.min(tracks.len() - 1);
-        let current = tracks[idx].clone();
-        let mut remaining = tracks[idx + 1..].to_vec();
+        let idx = if self.shuffle && tracks.len() > 1 && start_idx == 0 {
+            fastrand::usize(..tracks.len())
+        } else {
+            start_idx.min(tracks.len() - 1)
+        };
 
-        if self.shuffle && remaining.len() > 1 {
-            fastrand::shuffle(&mut remaining);
-        }
+        let current = tracks[idx].clone();
+
+        let remaining: Vec<Track> = if self.shuffle {
+            let mut rem: Vec<Track> = tracks
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != idx)
+                .map(|(_, t)| t.clone())
+                .collect();
+            if rem.len() > 1 {
+                fastrand::shuffle(&mut rem);
+            }
+            rem
+        } else {
+            tracks[idx + 1..].to_vec()
+        };
 
         self.current = Some(current.clone());
         self.items = remaining;

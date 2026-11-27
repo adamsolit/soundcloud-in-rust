@@ -193,26 +193,6 @@ impl PlaylistView {
             .valign(gtk::Align::Center)
             .build();
 
-        let btn_play_all = gtk::Button::builder()
-            .label("Play All")
-            .icon_name("media-playback-start-symbolic")
-            .css_classes(["btn-pill-play"])
-            .height_request(36)
-            .build();
-
-        let cur_pl_clone = Rc::clone(&current_detail_playlist);
-        let play_q_cb = Rc::clone(&on_play_queue);
-        btn_play_all.connect_clicked(move |_| {
-            if let Some(ref pl) = *cur_pl_clone.borrow() {
-                if !pl.tracks.is_empty() {
-                    let tracks = pl.tracks.clone();
-                    if let Some(ref cb) = *play_q_cb.borrow() {
-                        cb(tracks, 0);
-                    }
-                }
-            }
-        });
-
         let btn_shuffle = gtk::ToggleButton::builder()
             .icon_name("media-playlist-shuffle-symbolic")
             .css_classes(["filter-chip"])
@@ -227,6 +207,33 @@ impl PlaylistView {
             } else {
                 btn.remove_css_class("active");
                 btn.set_tooltip_text(Some("Shuffle: OFF (sequential playback order)"));
+            }
+        });
+
+        let btn_play_all = gtk::Button::builder()
+            .label("Play All")
+            .icon_name("media-playback-start-symbolic")
+            .css_classes(["btn-pill-play"])
+            .height_request(36)
+            .build();
+
+        let cur_pl_clone = Rc::clone(&current_detail_playlist);
+        let play_q_cb = Rc::clone(&on_play_queue);
+        let btn_shuffle_c = btn_shuffle.clone();
+        btn_play_all.connect_clicked(move |_| {
+            if let Some(ref pl) = *cur_pl_clone.borrow() {
+                if !pl.tracks.is_empty() {
+                    let tracks = pl.tracks.clone();
+                    if let Some(ref cb) = *play_q_cb.borrow() {
+                        let is_shuffle = btn_shuffle_c.is_active();
+                        let start_idx = if is_shuffle && tracks.len() > 1 {
+                            fastrand::usize(..tracks.len())
+                        } else {
+                            0
+                        };
+                        cb(tracks, start_idx);
+                    }
+                }
             }
         });
 

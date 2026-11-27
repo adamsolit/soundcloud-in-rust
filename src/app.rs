@@ -1471,6 +1471,8 @@ impl Application {
                 match s.client.get_playlist_details(pl_id).await {
                     Ok(detail) => {
                         w.library_view.playlist_view.open_playlist_detail(detail);
+                        let is_shuf = s.audio.get_queue().lock().unwrap().shuffle;
+                        w.library_view.playlist_view.set_shuffle_active(is_shuf);
                     }
                     Err(e) => {
                         warn!("Failed to load playlist {}: {}", pl_id, e);

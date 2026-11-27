@@ -119,6 +119,38 @@ fn test_playback_queue_logic() {
 }
 
 #[test]
+fn test_playback_queue_shuffle_plays_random_first_and_retains_all_tracks() {
+    let mut queue = PlaybackQueue::new();
+    queue.set_shuffle(true);
+    assert!(queue.shuffle);
+
+    let tracks: Vec<Track> = (1..=20)
+        .map(|i| create_dummy_track(i, &format!("Track {}", i)))
+        .collect();
+
+    // With shuffle ON, set_queue with start_idx 0 must pick a random track and retain all 19 others in items
+    let curr = queue.set_queue(tracks.clone(), 0).expect("Track should be returned");
+    assert!(curr.id >= 1 && curr.id <= 20);
+    assert_eq!(queue.items.len(), 19);
+
+    // Verify all 20 unique tracks are accounted for (1 current + 19 items)
+    let mut all_ids: Vec<u64> = queue.items.iter().map(|t| t.id).collect();
+    all_ids.push(curr.id);
+    all_ids.sort();
+    let expected_ids: Vec<u64> = (1..=20).collect();
+    assert_eq!(all_ids, expected_ids);
+
+    // Run 100 trials to ensure the first track is not always track 1
+    let mut first_ids = std::collections::HashSet::new();
+    for _ in 0..100 {
+        let c = queue.set_queue(tracks.clone(), 0).unwrap();
+        first_ids.insert(c.id);
+    }
+    // Across 100 random picks from 20 tracks, we should have seen at least 5 different initial tracks
+    assert!(first_ids.len() > 5, "Initial track selection should be random, got {:?}", first_ids);
+}
+
+#[test]
 fn test_database_caching_and_history() {
     let db = Database::new().expect("Failed to initialize SQLite test DB");
     let track = create_dummy_track(999, "Test Underground Ambient");
