@@ -333,8 +333,8 @@ window.mini-player-window {
     border: none;
     color: #8e8e93;
     border-radius: 50%;
-    min-width: 32px;
-    min-height: 32px;
+    min-width: 34px;
+    min-height: 34px;
     padding: 0;
     transition: color 120ms ease, background 120ms ease;
 }

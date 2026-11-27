@@ -119,6 +119,9 @@ impl MiniPlayerWindow {
             .icon_name("media-skip-backward-symbolic")
             .css_classes(["btn-transport"])
             .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(34)
+            .height_request(34)
             .tooltip_text("Previous track")
             .build();
 
@@ -128,6 +131,7 @@ impl MiniPlayerWindow {
             .width_request(34)
             .height_request(34)
             .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
             .tooltip_text("Play / Pause")
             .build();
 
@@ -135,6 +139,9 @@ impl MiniPlayerWindow {
             .icon_name("media-skip-forward-symbolic")
             .css_classes(["btn-transport"])
             .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(34)
+            .height_request(34)
             .tooltip_text("Next track")
             .build();
 
@@ -142,6 +149,9 @@ impl MiniPlayerWindow {
             .icon_name("view-restore-symbolic")
             .css_classes(["btn-transport"])
             .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(34)
+            .height_request(34)
             .tooltip_text("Restore Full Window")
             .build();
 

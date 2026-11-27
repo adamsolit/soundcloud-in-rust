@@ -145,6 +145,9 @@ impl PlayerBar {
             .css_classes(["btn-transport"])
             .tooltip_text("Like track")
             .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(34)
+            .height_request(34)
             .build();
 
         info_box.append(&artwork);
@@ -164,30 +167,50 @@ impl PlayerBar {
             .icon_name("media-playlist-shuffle-symbolic")
             .css_classes(["btn-transport"])
             .tooltip_text("Shuffle")
+            .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(34)
+            .height_request(34)
             .build();
 
         let btn_prev = gtk::Button::builder()
             .icon_name("media-skip-backward-symbolic")
             .css_classes(["btn-transport"])
             .tooltip_text("Previous Track")
+            .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(34)
+            .height_request(34)
             .build();
 
         let btn_play_pause = gtk::Button::builder()
             .icon_name("media-playback-start-symbolic")
             .css_classes(["btn-transport-play"])
             .tooltip_text("Play")
+            .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(44)
+            .height_request(44)
             .build();
 
         let btn_next = gtk::Button::builder()
             .icon_name("media-skip-forward-symbolic")
             .css_classes(["btn-transport"])
             .tooltip_text("Next Track")
+            .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(34)
+            .height_request(34)
             .build();
 
         let btn_repeat = gtk::Button::builder()
             .icon_name("media-playlist-repeat-symbolic")
             .css_classes(["btn-transport"])
             .tooltip_text("Repeat")
+            .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(34)
+            .height_request(34)
             .build();
 
         center_box.append(&btn_shuffle);
@@ -211,6 +234,9 @@ impl PlayerBar {
             .css_classes(["btn-transport"])
             .tooltip_text("More Options")
             .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(34)
+            .height_request(34)
             .build();
 
         let more_popover = gtk::Popover::builder()
@@ -536,6 +562,9 @@ impl PlayerBar {
             .css_classes(["btn-transport"])
             .tooltip_text("Up Next & Playback Queue")
             .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(34)
+            .height_request(34)
             .build();
 
         let queue_popover = gtk::Popover::builder()
@@ -605,6 +634,9 @@ impl PlayerBar {
             .css_classes(["btn-transport"])
             .tooltip_text("Mute")
             .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(34)
+            .height_request(34)
             .build();
 
         let volume_scale = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 1.0, 0.05);
@@ -681,6 +713,9 @@ impl PlayerBar {
             .css_classes(["btn-transport"])
             .tooltip_text("Toggle Mini-Player Mode (Ctrl+M)")
             .valign(gtk::Align::Center)
+            .halign(gtk::Align::Center)
+            .width_request(34)
+            .height_request(34)
             .build();
 
         // Right side strictly: [... (more)] [queue] [mute] [volume slider] [minimize]
