@@ -25,12 +25,7 @@ impl PlaybackQueue {
         }
 
         self.original_pool = tracks.clone();
-        let idx = if self.shuffle && tracks.len() > 1 && start_idx == 0 {
-            fastrand::usize(..tracks.len())
-        } else {
-            start_idx.min(tracks.len() - 1)
-        };
-
+        let idx = start_idx.min(tracks.len() - 1);
         let current = tracks[idx].clone();
 
         let remaining: Vec<Track> = if self.shuffle {
